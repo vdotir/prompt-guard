@@ -71,6 +71,29 @@ Tuning:
 - A value that must stay visible: add it to `allowlist`.
 - A secret format that is not caught: add a `[[rules.patterns]]` entry.
 
+## Session vault
+
+Each chat with an online AI should use its own session. Without a session name, the session `default` is used.
+
+- Placeholders look like `[[EMAIL_1]]`. Within a session the same value always gets the same placeholder, also in later messages. A value already in the vault is hidden again even if no detector finds it the next time.
+- Files: `~/.local/state/prompt-guard/<session>.json` (change with `[vault] dir`). The folder has mode 0700 and each file 0600. If the permissions get looser, they are tightened again on the next run.
+- Expiry: a session not used for `ttl_hours` (default 24) is deleted the next time any session is opened. `ttl_hours = 0` keeps sessions until you clear them.
+- The vault file holds every real value of the session. Do not copy it, back it up, or put it under git.
+
+Check the vault folder and its permissions:
+
+```bash
+ls -la ~/.local/state/prompt-guard/
+```
+
+## Restore
+
+Restore replaces placeholders in the AI's reply with the real values. It also accepts the forms chats often produce: `[[ X_1 ]]`, `\[\[X_1\]\]`, `[X_1]`, `<X_1>`, `&lt;X_1&gt;`. Single brackets and angle brackets are only replaced when the placeholder is in the vault, so normal text such as `[ITEM_1]` stays as it is.
+
+A `[[X_N]]` placeholder that is not in the vault is left unchanged and reported as unknown. Usually the AI invented it; check that part of the reply by hand.
+
+Tip: tell the online AI once at the start of the chat to keep `[[...]]` placeholders exactly as they are.
+
 ## Tests and fake secrets
 
 The repo is public and GitHub push protection scans every push. Tests never contain token-shaped literals: `tests/fakes.py` builds obviously fake tokens from pieces at runtime. Follow the same rule for new tests.

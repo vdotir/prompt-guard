@@ -68,6 +68,7 @@ class RulesConfig:
 @dataclass(frozen=True)
 class VaultConfig:
     dir: str = "~/.local/state/prompt-guard"
+    ttl_hours: float = 24.0  # sessions unused for longer are deleted; 0 = never
 
 
 @dataclass(frozen=True)
@@ -186,6 +187,8 @@ def parse_config(data: dict[str, Any], source: str | None = None) -> Config:
         raise ConfigError("rules.entropy_threshold: must be between 0 and 8")
     if cfg.rules.entropy_min_length < 8:
         raise ConfigError("rules.entropy_min_length: must be at least 8")
+    if cfg.vault.ttl_hours < 0:
+        raise ConfigError("vault.ttl_hours: must be 0 (never expire) or more")
     if not 0 < cfg.ner.threshold < 1:
         raise ConfigError("ner.threshold: must be between 0 and 1")
     return cfg

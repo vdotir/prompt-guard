@@ -30,6 +30,7 @@ regex = '\bEXAMPLE-\d{4}\b'
 
 [vault]
 dir = "~/.local/state/prompt-guard"   # session mapping files, created with mode 0700/0600
+ttl_hours = 24.0    # sessions not used for this long are deleted; 0 = keep until "clear"
 
 [ner]
 model = "nvidia/gliner-PII"

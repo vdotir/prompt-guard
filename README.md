@@ -44,7 +44,7 @@ The same value always gets the same placeholder within a session, for example `[
 | Repository setup (README, license, tooling) | Done |
 | Config file and example template | Done |
 | Layer 1: rules (regex + entropy) | Done |
-| Session vault and restore | Planned |
+| Session vault and restore | Done |
 | CLI: `redact`, `restore`, `clear` | Planned |
 | Clipboard backends (X11, Wayland, WSL) | Planned |
 | Layer 2: NER (GLiNER-PII) | Planned |

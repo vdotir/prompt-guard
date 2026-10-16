@@ -79,6 +79,7 @@ def test_int_accepted_for_float():
         {"rules": {"entropy_threshold": 9}},
         {"rules": {"entropy_min_length": 3}},
         {"ner": {"threshold": 1.5}},
+        {"vault": {"ttl_hours": -1}},
         {"rules": {"patterns": [{"name": "lower", "regex": "x"}]}},
         {"rules": {"patterns": [{"name": "BAD", "regex": "("}]}},
         {"rules": {"patterns": [{"name": "X"}]}},
