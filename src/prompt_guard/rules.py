@@ -4,7 +4,8 @@ Purpose:
     Find secrets and structured personal data that have a known shape:
     private keys, cloud and API tokens, JWTs, credentials in URLs,
     "password = ..." style assignments, emails, IPs, phone numbers,
-    the user's own words and patterns, and long random-looking strings
+    internal hostnames (names ending in .lan, .internal, ...), the user's
+    own words and patterns, and long random-looking strings
     (Shannon entropy). Returns Span objects; it never changes the text.
 
 Path in repo:
@@ -12,7 +13,8 @@ Path in repo:
 
 Relations:
     - Uses Span / resolve_overlaps from src/prompt_guard/spans.py.
-    - Reads settings from Config.rules (src/prompt_guard/config.py).
+    - Reads settings from Config.rules (src/prompt_guard/config.py),
+      including internal_domains for the HOSTNAME rule.
     - Its spans feed the vault / redaction step (later step).
     - Tested in tests/test_rules.py.
 
@@ -127,6 +129,19 @@ def _valid_ip(value: str) -> bool:
     return True
 
 
+def hostname_rule(domains: tuple[str, ...]) -> Rule:
+    """Internal hostnames: one or more labels, then one of the given suffixes.
+
+    "build-07.corp-internal.lan" is one HOSTNAME, so it is hidden whole and
+    no part of it (".lan") stays visible. The suffix alone ("lan") is not
+    matched: at least one label must come before it.
+    """
+    label = r"[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?"
+    suffixes = "|".join(re.escape(d) for d in sorted(domains, key=len, reverse=True))
+    pattern = rf"(?<![\w.-])(?:{label}\.)+(?:{suffixes})(?![\w-]|\.[A-Za-z0-9])"
+    return Rule("HOSTNAME", _rx(pattern, re.IGNORECASE))
+
+
 class RuleDetector:
     """Find spans with built-in rules plus the user's words and patterns."""
 
@@ -139,8 +154,9 @@ class RuleDetector:
             for w in self.cfg.words
             if w.strip()
         ]
+        hosts = [hostname_rule(self.cfg.internal_domains)] if self.cfg.internal_domains else []
         # User rules come first so they win ties against built-in ones.
-        self.rules: tuple[Rule, ...] = (*custom, *words, *BUILTIN_RULES)
+        self.rules: tuple[Rule, ...] = (*custom, *words, *hosts, *BUILTIN_RULES)
 
     def _keep(self, kind: str, value: str) -> bool:
         if not value.strip() or value.casefold() in self.allow:

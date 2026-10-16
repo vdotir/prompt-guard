@@ -4,6 +4,11 @@ A fully local CLI that removes secrets and personal data from text before you pa
 
 Nothing leaves your machine, except calls to a local LLM server that you configure yourself (optional).
 
+```
+before:           db = postgres://app:S3cretPw@build-07.corp.lan/main   # ask Margaret Thompson
+after (--ner):    db = postgres://app:[[PASSWORD_1]]@[[HOSTNAME_1]]/main   # ask [[PERSON_1]]
+```
+
 ## How it works
 
 ```
@@ -22,34 +27,13 @@ Detection runs in three layers. Each layer can be turned off.
 
 | Layer | What it finds | Runs on |
 |---|---|---|
-| 1. Rules | API keys, tokens, passwords, private keys (PEM), JWTs, URL credentials, emails, IPs, phone numbers, your own patterns | Pure Python (regex + entropy) |
+| 1. Rules | API keys, tokens, passwords, private keys (PEM), JWTs, URL credentials, emails, IPs, phone numbers, internal hostnames, your own words and patterns | Pure Python (regex + entropy) |
 | 2. NER (optional) | Names, addresses, organizations, usernames | A GLiNER PII model with torch, on CPU by default |
 | 3. LLM review (optional) | Anything the first two layers missed | Any OpenAI-compatible local server (LM Studio, Ollama), standard library only |
 
 The LLM only lists values. It never rewrites your text. The code replaces exact matches only, so the LLM cannot add or change content.
 
 The same value always gets the same placeholder within a session, for example `[[API_KEY_1]]` or `[[EMAIL_2]]`. Double square brackets survive Markdown chat interfaces, which often strip `<...>` as HTML.
-
-## Supported setups
-
-- LM Studio or Ollama on the same machine.
-- LM Studio on another host, for example an Ubuntu VM with a bridged network and LM Studio on the Windows host.
-- No GPU: rules + NER only.
-- Clipboard: X11 (`xclip`), Wayland (`wl-clipboard`), WSL (PowerShell / `clip.exe`), or stdin/stdout.
-
-## Status
-
-| Part | Status |
-|---|---|
-| Repository setup (README, license, tooling) | Done |
-| Config file and example template | Done |
-| Layer 1: rules (regex + entropy) | Done |
-| Session vault and restore | Done |
-| CLI: `redact`, `restore`, `clear`, `sessions` | Done |
-| Clipboard backends (X11, Wayland, WSL, macOS) | Done |
-| Layer 2: NER (GLiNER PII model, optional extra) | Done |
-| Layer 3: LLM review (OpenAI-compatible, optional) | Done |
-| Install and usage guide in `docs/runbook.md` | Done |
 
 ## Quick start
 
@@ -85,11 +69,46 @@ pgd clear
 cat app.log | pgd redact > safe.log
 ```
 
-See [docs/runbook.md](docs/runbook.md) for clipboard tools, sessions and troubleshooting.
+### Without a terminal (GNOME)
+
+Add two keyboard shortcuts: Ctrl+Alt+R redacts the clipboard, Ctrl+Alt+U restores it. A desktop notification tells you what happened.
+
+```bash
+pgd shortcuts install
+```
+
+### More layers
+
+- Names and addresses: install the optional NER extra and use `--ner`.
+- A local LLM as a final check: start LM Studio or Ollama and use `--llm`.
+
+[docs/runbook.md](docs/runbook.md) has the full setup, a worked example from start to finish, and troubleshooting.
+
+## Supported setups
+
+- Linux with Wayland or X11, WSL, and macOS clipboards, or stdin/stdout anywhere.
+- LM Studio or Ollama on the same machine, or on another host in the LAN (for example an Ubuntu VM with LM Studio on the Windows host).
+- No GPU: layers 1 and 2 run on CPU; layer 3 is optional.
 
 ## Configuration
 
-Copy [config.example.toml](config.example.toml) to `~/.config/prompt-guard/config.toml` and edit it. Every key is optional. Add your own project names, internal hosts and token formats under `[rules]`: these custom rules catch the leaks that generic detection misses.
+Copy [config.example.toml](config.example.toml) to `~/.config/prompt-guard/config.toml` and edit it. Every key is optional. Add your own project names, internal domains and token formats under `[rules]`: these custom rules catch the leaks that generic detection misses.
+
+## Status
+
+Version 1.0.0. See [CHANGELOG.md](CHANGELOG.md).
+
+| Part | Status |
+|---|---|
+| Layer 1: rules (regex, entropy, internal hostnames) | Done |
+| Layer 2: NER (GLiNER PII model, optional extra) | Done |
+| Layer 3: LLM review (OpenAI-compatible, optional) | Done |
+| Session vault with expiry, and restore | Done |
+| CLI: `redact`, `restore`, `clear`, `sessions`, `llm-check`, `shortcuts` | Done |
+| Clipboard backends (Wayland, X11, WSL, macOS) | Done |
+| Keyboard shortcuts and desktop notifications (GNOME) | Done |
+| Config file with validation and example template | Done |
+| Install, usage and troubleshooting guide (`docs/runbook.md`) | Done |
 
 ## Development
 

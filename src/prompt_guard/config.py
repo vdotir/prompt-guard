@@ -66,6 +66,18 @@ class RulesConfig:
     words: tuple[str, ...] = ()
     allowlist: tuple[str, ...] = ("127.0.0.1", "0.0.0.0", "255.255.255.255", "localhost")
     patterns: tuple[CustomPattern, ...] = ()
+    # Names ending in these are internal hostnames, hidden whole as [[HOSTNAME_N]].
+    internal_domains: tuple[str, ...] = (
+        "lan",
+        "local",
+        "internal",
+        "intranet",
+        "corp",
+        "home",
+        "lab",
+        "localdomain",
+        "home.arpa",
+    )
 
 
 @dataclass(frozen=True)
@@ -211,6 +223,12 @@ def parse_config(data: dict[str, Any], source: str | None = None) -> Config:
     cfg = Config(**parts, source=source)
     if not 0 < cfg.rules.entropy_threshold <= 8:
         raise ConfigError("rules.entropy_threshold: must be between 0 and 8")
+    for domain in cfg.rules.internal_domains:
+        if not re.fullmatch(r"[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)*", domain):
+            raise ConfigError(
+                f"rules.internal_domains: {domain!r} is not a domain suffix like 'lan' or "
+                "'corp.example.com' (no leading dot, no wildcards)"
+            )
     if cfg.rules.entropy_min_length < 8:
         raise ConfigError("rules.entropy_min_length: must be at least 8")
     if cfg.vault.ttl_hours < 0:

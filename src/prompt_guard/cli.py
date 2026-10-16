@@ -6,6 +6,7 @@ Purpose:
     clear     delete one session (or all) from the vault
     sessions  list the sessions in the vault
     llm-check test the connection to the LLM server and list its models
+    shortcuts add or remove keyboard shortcuts (GNOME) for redact and restore
 
     Input and output default to the clipboard. If stdin is a pipe or a file,
     it is read instead; if stdout is a pipe or a file, the result goes there.
@@ -19,7 +20,7 @@ Relations:
     - Entry points "prompt-guard" and "pgd" in pyproject.toml; also
       src/prompt_guard/__main__.py for "python -m prompt_guard".
     - Uses config.py, pipeline.py (rules.py, ner.py, llm.py), vault.py,
-      restore.py, clipboard.py.
+      restore.py, clipboard.py, notify.py, shortcuts.py.
     - Tested in tests/test_cli.py.
 
 How to run:
@@ -27,6 +28,7 @@ How to run:
     prompt-guard redact --ner --show
     prompt-guard redact --ner --llm --show
     prompt-guard llm-check
+    prompt-guard shortcuts install --ner
     prompt-guard restore
     prompt-guard redact -i -o < input.txt > redacted.txt
     prompt-guard --help
@@ -38,13 +40,14 @@ import argparse
 import dataclasses
 import io as _io
 import os
+import shutil
 import stat
 import sys
 from collections import Counter
 from collections.abc import Sequence
 from typing import TextIO
 
-from prompt_guard import __version__
+from prompt_guard import __version__, notify, shortcuts
 from prompt_guard.clipboard import Clipboard, ClipboardError
 from prompt_guard.config import Config, ConfigError, load_config
 from prompt_guard.llm import LlmUnavailable, list_models
@@ -143,6 +146,12 @@ class Io:
         return "copied to clipboard"
 
 
+def _notify(args, title: str, body: str = "", urgency: str = "normal") -> None:
+    """Desktop notification when --notify is set (keyboard-shortcut runs)."""
+    if getattr(args, "notify", False):
+        notify.send(title, body, urgency)
+
+
 def _summary(reps: list[Replacement]) -> str:
     counts = Counter(r.kind for r in reps)
     return ", ".join(f"{kind} {n}" for kind, n in sorted(counts.items()))
@@ -175,12 +184,19 @@ def cmd_redact(args, cfg, io, err) -> int:
     where = io.write(out)
     if not reps:
         print(f"No sensitive values found; text unchanged, {where}.", file=err)
+        _notify(args, "Nothing to hide", "No sensitive values found; text unchanged.", "low")
         return EXIT_OK
     unique = {r.placeholder: r for r in reps}
+    summary = _summary(list(unique.values()))
     print(
-        f"Redacted {len(reps)} value(s), {len(unique)} unique ({_summary(list(unique.values()))})"
+        f"Redacted {len(reps)} value(s), {len(unique)} unique ({summary})"
         f" in session '{args.session}'; {where}.",
         file=err,
+    )
+    _notify(
+        args,
+        f"Redacted {len(unique)} value(s)",
+        f"{summary}. Check the text before you paste it.",
     )
     if args.show:
         width = max(len(p) for p in unique)
@@ -208,6 +224,14 @@ def cmd_restore(args, cfg, io, err) -> int:
             + ", ".join(result.unknown),
             file=err,
         )
+        _notify(
+            args,
+            f"Restored {result.restored}, {len(result.unknown)} unknown",
+            "Unknown placeholders were left unchanged: " + ", ".join(result.unknown),
+            "critical",
+        )
+    else:
+        _notify(args, f"Restored {result.restored} placeholder(s)", "Clipboard is ready.")
     return EXIT_OK
 
 
@@ -251,6 +275,35 @@ def cmd_llm_check(args, cfg, io, err) -> int:
     return EXIT_ERROR
 
 
+def cmd_shortcuts(args, cfg, io, err) -> int:
+    try:
+        extra = " ".join(flag for flag, on in (("--ner", args.ner), ("--llm", args.llm)) if on)
+        wanted = shortcuts.build(args.redact_key, args.restore_key, extra)
+        if not shortcuts.gnome_available():
+            print("GNOME keyboard settings not found.", file=err)
+            print(shortcuts.manual_instructions(wanted), file=err)
+            return EXIT_OK if args.action == "show" else EXIT_ERROR
+        gnome = shortcuts.GnomeShortcuts()
+        if args.action == "install":
+            gnome.install(wanted)
+            for sc in wanted:
+                print(f"Added {sc.binding}: {sc.command}", file=err)
+            if not shutil.which("notify-send"):
+                print("note: install libnotify-bin to see notifications", file=err)
+        elif args.action == "remove":
+            n = gnome.remove(wanted)
+            print(f"Removed {n} prompt-guard shortcut(s).", file=err)
+        else:
+            active = gnome.show(wanted)
+            for name, binding, command in active:
+                io.stdout.write(f"{binding:<18} {command}   ({name})\n")
+            if not active:
+                print("No prompt-guard shortcuts installed.", file=err)
+    except shortcuts.ShortcutError as exc:
+        raise CliError(str(exc)) from exc
+    return EXIT_OK
+
+
 def build_parser() -> argparse.ArgumentParser:
     common = argparse.ArgumentParser(add_help=False)
     common.add_argument(
@@ -270,6 +323,11 @@ def build_parser() -> argparse.ArgumentParser:
     )
     io_opts.add_argument(
         "-o", "--stdout", action="store_true", help="write stdout instead of the clipboard"
+    )
+    io_opts.add_argument(
+        "--notify",
+        action="store_true",
+        help="also show a desktop notification (for keyboard shortcuts; never shows values)",
     )
 
     parser = argparse.ArgumentParser(
@@ -312,6 +370,26 @@ def build_parser() -> argparse.ArgumentParser:
     p.set_defaults(func=cmd_sessions, stdin=False, stdout=True)
 
     p = sub.add_parser(
+        "shortcuts", parents=[common], help="add or remove keyboard shortcuts (GNOME)"
+    )
+    p.add_argument("action", choices=["install", "remove", "show"])
+    p.add_argument(
+        "--redact-key",
+        default=shortcuts.DEFAULT_REDACT_KEY,
+        help=f"key for redact (default: {shortcuts.DEFAULT_REDACT_KEY})",
+    )
+    p.add_argument(
+        "--restore-key",
+        default=shortcuts.DEFAULT_RESTORE_KEY,
+        help=f"key for restore (default: {shortcuts.DEFAULT_RESTORE_KEY})",
+    )
+    p.add_argument("--ner", action="store_true", help="the redact shortcut also runs layer 2 (NER)")
+    p.add_argument(
+        "--llm", action="store_true", help="the redact shortcut also runs layer 3 (LLM review)"
+    )
+    p.set_defaults(func=cmd_shortcuts, stdin=False, stdout=True)
+
+    p = sub.add_parser(
         "llm-check", parents=[common], help="test the LLM server and list its models"
     )
     p.set_defaults(func=cmd_llm_check, stdin=False, stdout=True)
@@ -337,6 +415,7 @@ def main(
         return args.func(args, cfg, io, err)
     except (CliError, ConfigError, VaultError) as exc:
         print(f"prompt-guard: error: {exc}", file=err)
+        _notify(args, "prompt-guard: error", f"{exc}\nThe clipboard was not changed.", "critical")
         return EXIT_ERROR
     except KeyboardInterrupt:
         print("prompt-guard: interrupted", file=err)

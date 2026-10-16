@@ -175,3 +175,15 @@ def test_known_loader_warnings_are_silenced(monkeypatch):
         warnings.simplefilter("always")
         assert ner_module.load_model(NerConfig()) == "model"
     assert [str(w.message) for w in caught] == ["something else"]
+
+
+def test_hostname_rule_beats_ner_pieces():
+    text = "Deploy failed on build-07.corp-internal.lan, ask Margaret."
+    cfg = Config(layers=LayersConfig(ner=True))
+    model = FakeModel({"build-07": "username", "corp-internal": "organization", "Margaret": "name"})
+    det = NerDetector(cfg.ner, model=model)
+    spans = detect_all(text, cfg, ner_detector=det).spans
+    assert [(s.kind, s.value(text)) for s in spans] == [
+        ("HOSTNAME", "build-07.corp-internal.lan"),
+        ("PERSON", "Margaret"),
+    ]

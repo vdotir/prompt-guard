@@ -145,3 +145,46 @@ def test_mixed_config_file():
     kinds = {kind for kind, _ in found(text)}
     assert kinds == {"IP", "EMAIL", "AWS_KEY", "PASSWORD"}
     assert ("PASSWORD", "r3disPass") in found(text)
+
+
+@pytest.mark.parametrize(
+    "host",
+    [
+        "build-07.corp-internal.lan",
+        "nas.local",
+        "db1.prod.internal",
+        "printer.home.arpa",
+        "GIT.Example.CORP",
+    ],
+)
+def test_internal_hostname_is_one_span(host):
+    text = f"Deploy failed on {host}, retry"
+    assert found(text) == [("HOSTNAME", host)]
+
+
+def test_hostname_in_url_keeps_port_and_path():
+    text = "open http://build-07.lan:8080/status now"
+    assert found(text) == [("HOSTNAME", "build-07.lan")]
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "see github.com and docs.python.org",
+        "the lan is down",
+        "file report.local.txt",
+        "module config.internal_value",
+    ],
+)
+def test_public_domains_and_lookalikes_not_hostnames(text):
+    assert [k for k, _ in found(text) if k == "HOSTNAME"] == []
+
+
+def test_custom_internal_domain():
+    cfg = RulesConfig(internal_domains=("corp.example.com",))
+    text = "ssh to jump1.corp.example.com, not www.example.com"
+    assert found(text, cfg) == [("HOSTNAME", "jump1.corp.example.com")]
+
+
+def test_email_wins_over_hostname():
+    assert found("mail ops@build.lan") == [("EMAIL", "ops@build.lan")]

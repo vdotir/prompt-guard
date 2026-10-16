@@ -106,3 +106,9 @@ def test_bad_toml_raises(tmp_path):
     p.write_text("[layers\n", encoding="utf-8")
     with pytest.raises(ConfigError):
         load_config(p)
+
+
+@pytest.mark.parametrize("domain", [".lan", "*.corp", "a..b", ""])
+def test_bad_internal_domain(domain):
+    with pytest.raises(ConfigError):
+        parse_config({"rules": {"internal_domains": [domain]}})

@@ -99,7 +99,7 @@ A typo in a key name, a wrong type, or an invalid regex stops the program with a
 
 ## Layer 1: rules
 
-Built-in kinds: PRIVATE_KEY, AWS_KEY, GITHUB_TOKEN, SLACK_TOKEN, API_KEY, GOOGLE_API_KEY, JWT, PASSWORD (in URLs), BEARER_TOKEN, SECRET (key = value assignments and high-entropy strings), EMAIL, IP (v4 and v6), PHONE, plus CUSTOM (your words) and your own pattern names.
+Built-in kinds: PRIVATE_KEY, AWS_KEY, GITHUB_TOKEN, SLACK_TOKEN, API_KEY, GOOGLE_API_KEY, JWT, PASSWORD (in URLs), BEARER_TOKEN, SECRET (key = value assignments and high-entropy strings), EMAIL, IP (v4 and v6), PHONE, HOSTNAME (internal names such as `build-07.corp.lan`), plus CUSTOM (your words) and your own pattern names.
 
 Try layer 1 on any text:
 
@@ -112,6 +112,7 @@ Tuning:
 - Too many harmless strings flagged as SECRET: raise `entropy_threshold` (for example 4.3) or `entropy_min_length`.
 - A value that must stay visible: add it to `allowlist`.
 - A secret format that is not caught: add a `[[rules.patterns]]` entry.
+- Your company's internal domain: add it to `internal_domains` (for example `"corp.example.com"`). Every name ending in it is hidden whole as `[[HOSTNAME_N]]`. Public domains such as `github.com` stay visible, so the AI can still understand the text.
 
 ## Layer 2: NER (names, addresses, organizations)
 
@@ -298,6 +299,24 @@ A `[[X_N]]` placeholder that is not in the vault is left unchanged and reported 
 
 Tip: tell the online AI once at the start of the chat to keep `[[...]]` placeholders exactly as they are.
 
+## Release
+
+Versions follow Semantic Versioning. The version is set in two places: `pyproject.toml` and `src/prompt_guard/__init__.py` (a test checks that they match). Every release gets an entry in `CHANGELOG.md`.
+
+After the release commit is pushed, tag it and create the GitHub release (example for 1.0.0):
+
+```bash
+git tag -a v1.0.0 -m "prompt-guard 1.0.0"
+```
+
+```bash
+git push origin v1.0.0
+```
+
+```bash
+gh release create v1.0.0 --title "prompt-guard 1.0.0" --notes "First stable release. See CHANGELOG.md."
+```
+
 ## Tests and fake secrets
 
 The repo is public and GitHub push protection scans every push. Tests never contain token-shaped literals: `tests/fakes.py` builds obviously fake tokens from pieces at runtime. Follow the same rule for new tests.
@@ -348,6 +367,49 @@ pgd sessions
 pgd clear --all
 ```
 
+### Keyboard shortcuts (GNOME)
+
+Install two shortcuts:
+
+```bash
+pgd shortcuts install
+```
+
+- Ctrl+Alt+R: redact the clipboard
+- Ctrl+Alt+U: restore the clipboard
+
+Notifications need notify-send:
+
+```bash
+sudo apt install libnotify-bin
+```
+
+The redact shortcut uses the layers from your config. To add layers only for the shortcut:
+
+```bash
+pgd shortcuts install --ner --llm
+```
+
+Other keys, for example Super+Shift+R and Super+Shift+U:
+
+```bash
+pgd shortcuts install --redact-key "<Super><Shift>r" --restore-key "<Super><Shift>u"
+```
+
+Show and remove:
+
+```bash
+pgd shortcuts show
+```
+
+```bash
+pgd shortcuts remove
+```
+
+The shortcuts store the full path of `pgd` in your venv. If you move the project folder, run `pgd shortcuts install` again. Shortcuts always use the session `default`; use the terminal with `-s` for separate sessions. Notifications say what happened but never show hidden values. On an error the clipboard is not changed.
+
+On other desktops (KDE, Xfce, ...) `pgd shortcuts install` prints the two commands; add them in that desktop's keyboard settings.
+
 ### Pipes and files
 
 If stdin is a pipe or a file, it is read instead of the clipboard. If stdout is a pipe or a file, the result goes there. `-i` and `-o` force stdin/stdout.
@@ -361,6 +423,62 @@ journalctl -u myservice -n 200 | pgd redact -s logs | less
 ```
 
 Messages and the `--show` list always go to stderr, so they never end up in the clipboard or the output file. `--show` masks values (for example `ops@…rg (15 chars)`), so real secrets do not stay in the terminal scrollback.
+
+### Worked example
+
+A real case from start to finish: you want an online AI to help with a failing deploy script, and the script contains a password, an internal host, a colleague's name and an email.
+
+1. Start a session for this chat and copy the script and error into the clipboard. Example text:
+
+```text
+#!/bin/bash
+# deploy.sh - maintained by Margaret Thompson (m.thompson@example.org)
+DB_URL="postgres://deploy:Wint3r-Sun-42@db1.prod.corp.lan:5432/shop"
+scp build.tar.gz deploy@build-07.corp.lan:/srv/releases/
+psql "$DB_URL" -c "select 1"
+# error: psql: FATAL: password authentication failed for user "deploy"
+```
+
+2. Redact it with all layers, for a session named after the chat:
+
+```bash
+pgd redact -s deploy-fix --ner --llm --show
+```
+
+3. Read the list on stderr and the clipboard text. It should look like this:
+
+```text
+#!/bin/bash
+# deploy.sh - maintained by [[PERSON_1]] ([[EMAIL_1]])
+DB_URL="postgres://deploy:[[PASSWORD_1]]@[[HOSTNAME_1]]:5432/shop"
+scp build.tar.gz [[EMAIL_2]]:/srv/releases/
+psql "$DB_URL" -c "select 1"
+# error: psql: FATAL: password authentication failed for user "deploy"
+```
+
+`deploy@build-07.corp.lan` has the shape of an email address, so it is hidden whole as `[[EMAIL_2]]`. `[[PERSON_1]]` comes from layer 2; without `--ner`, the name stays visible.
+
+If something sensitive is still visible, add it to `[rules] words` (or `internal_domains`) in the config and redact again from step 1. The vault keeps the same placeholders.
+
+4. Paste the text into the online chat. Add one line so the AI keeps the placeholders: "Keep every [[...]] placeholder exactly as written."
+
+5. The AI answers, for example with a fixed command that contains `[[PASSWORD_1]]` and `[[HOSTNAME_1]]`. Copy the whole answer, then restore:
+
+```bash
+pgd restore -s deploy-fix
+```
+
+6. The clipboard now holds the answer with your real password and host. Paste it into your editor or terminal. If restore warns about unknown placeholders, the AI invented them: check that part by hand.
+
+7. Continue the chat the same way, always with `-s deploy-fix`. A value you already hid gets the same placeholder in later messages.
+
+8. When the chat is over, delete the session:
+
+```bash
+pgd clear -s deploy-fix
+```
+
+With the keyboard shortcuts the same flow is: copy, Ctrl+Alt+R, paste into the chat; copy the answer, Ctrl+Alt+U, paste. Shortcuts use the session `default`, so run `pgd clear` when the chat is over.
 
 ### Exit codes
 
