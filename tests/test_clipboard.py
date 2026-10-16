@@ -136,3 +136,19 @@ def test_run_command_reads_and_writes():
 def test_run_command_failure():
     with pytest.raises(ClipboardError, match="exit 1"):
         run_command(["false"], None, 5.0)
+
+
+def test_writer_that_stays_in_background_does_not_block():
+    # Like wl-copy and xclip: read the input, then leave a background process
+    # running that still holds the inherited stdout/stderr.
+    import time
+
+    start = time.monotonic()
+    out = run_command(["sh", "-c", "cat >/dev/null; (sleep 5) &"], "secret", 3.0)
+    assert out == ""
+    assert time.monotonic() - start < 2.5
+
+
+def test_writer_failure_reports_stderr():
+    with pytest.raises(ClipboardError, match="boom"):
+        run_command(["sh", "-c", "cat >/dev/null; echo boom >&2; exit 3"], "x", 5.0)

@@ -2,6 +2,10 @@
 
 All notable changes to this project. Versions follow [Semantic Versioning](https://semver.org/).
 
+## 1.0.1 (2026-10-16)
+
+- Fix: writing the clipboard with wl-copy or xclip could hang until the timeout ("did not answer within 10s"). These tools leave a background process that kept the error pipe open. The error output now goes to a temporary file, so the write returns at once.
+
 ## 1.0.0 (2026-10-16)
 
 First stable release.

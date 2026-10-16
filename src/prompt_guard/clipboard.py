@@ -29,6 +29,7 @@ import os
 import shutil
 import subprocess
 import sys
+import tempfile
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
@@ -54,30 +55,41 @@ PS_WRITE = (
 
 
 def run_command(argv: list[str], input_text: str | None, timeout: float) -> str:
-    """Run a clipboard tool. Writers get no stdout pipe: some (xclip, wl-copy)
-    stay in the background to serve the clipboard and would block the pipe."""
+    """Run a clipboard tool.
+
+    Writers (wl-copy, xclip) leave a background process that serves the
+    clipboard until something else is copied. That process inherits the
+    writer's stdout and stderr. If those were pipes, waiting for the pipes to
+    close would block until the timeout, even though the copy worked. So a
+    writer gets no stdout, and its stderr goes to a temporary file instead of
+    a pipe.
+    """
     try:
         if input_text is None:
             proc = subprocess.run(
                 argv, capture_output=True, timeout=timeout, check=False, stdin=subprocess.DEVNULL
             )
+            stderr = proc.stderr or b""
         else:
-            proc = subprocess.run(
-                argv,
-                input=input_text.encode("utf-8"),
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.PIPE,
-                timeout=timeout,
-                check=False,
-            )
+            with tempfile.TemporaryFile() as errfile:
+                proc = subprocess.run(
+                    argv,
+                    input=input_text.encode("utf-8"),
+                    stdout=subprocess.DEVNULL,
+                    stderr=errfile,
+                    timeout=timeout,
+                    check=False,
+                )
+                errfile.seek(0)
+                stderr = errfile.read()
     except FileNotFoundError as exc:
         raise ClipboardError(f"{argv[0]} not found") from exc
     except subprocess.TimeoutExpired as exc:
         raise ClipboardError(f"{argv[0]} did not answer within {timeout:g}s") from exc
     if proc.returncode != 0:
-        err = (proc.stderr or b"").decode("utf-8", "replace").strip()
+        err = stderr.decode("utf-8", "replace").strip()
         raise ClipboardError(f"{argv[0]} failed (exit {proc.returncode}): {err}")
-    return (proc.stdout or b"").decode("utf-8", "replace")
+    return (proc.stdout or b"").decode("utf-8", "replace") if input_text is None else ""
 
 
 @dataclass(frozen=True)
