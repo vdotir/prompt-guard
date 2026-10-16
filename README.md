@@ -1,0 +1,68 @@
+# prompt-guard
+
+A fully local CLI that removes secrets and personal data from text before you paste it into an online AI chat, then puts the original values back into the AI's reply.
+
+Nothing leaves your machine, except calls to a local LLM server that you configure yourself (optional).
+
+## How it works
+
+```
+your text ──► redact ──► text with placeholders ──► online AI chat
+                │                                        │
+            session vault                                │
+            (local, 0600)                                ▼
+                │                                    AI reply
+                └──────────► restore ◄───────────────────┘
+                                │
+                                ▼
+                    reply with your real values
+```
+
+Detection runs in three layers. Each layer can be turned off.
+
+| Layer | What it finds | Runs on |
+|---|---|---|
+| 1. Rules | API keys, tokens, passwords, private keys (PEM), JWTs, URL credentials, emails, IPs, phone numbers, your own patterns | Pure Python (regex + entropy) |
+| 2. NER | Names, addresses, organizations, usernames | GLiNER-PII (Python) |
+| 3. LLM review (optional) | Anything the first two layers missed | Any OpenAI-compatible local server (LM Studio, Ollama) |
+
+The LLM only lists values. It never rewrites your text. The code replaces exact matches only, so the LLM cannot add or change content.
+
+The same value always gets the same placeholder within a session, for example `<API_KEY_1>` or `<EMAIL_2>`.
+
+## Supported setups
+
+- LM Studio or Ollama on the same machine.
+- LM Studio on another host, for example an Ubuntu VM with a bridged network and LM Studio on the Windows host.
+- No GPU: rules + NER only.
+- Clipboard: X11 (`xclip`), Wayland (`wl-clipboard`), WSL (PowerShell / `clip.exe`), or stdin/stdout.
+
+## Status
+
+| Part | Status |
+|---|---|
+| Repository setup (README, license, tooling) | Done |
+| Config file and example template | Planned |
+| Layer 1: rules (regex + entropy) | Planned |
+| Session vault and restore | Planned |
+| CLI: `redact`, `restore`, `clear` | Planned |
+| Clipboard backends (X11, Wayland, WSL) | Planned |
+| Layer 2: NER (GLiNER-PII) | Planned |
+| Layer 3: LLM review (OpenAI-compatible) | Planned |
+| Install guide in `docs/runbook.md` | Started |
+
+## Development
+
+See [docs/runbook.md](docs/runbook.md).
+
+## Limits
+
+No detection is perfect. Always look at the redacted text before you paste it. The vault file holds all your real values: keep it private and clear it when the chat is over. For very sensitive data, the safest option is not to send it to an online service at all.
+
+## License
+
+MIT. See [LICENSE](LICENSE).
+
+## Credits
+
+This project was built with the help of [Claude](https://claude.ai), an AI assistant by Anthropic.

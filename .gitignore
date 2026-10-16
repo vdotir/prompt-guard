@@ -1,0 +1,26 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.venv/
+venv/
+
+# Tools
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Local config and secrets: never commit
+config.toml
+.env
+*.vault.json
+.prompt-guard/
+
+# Editors and OS
+.vscode/
+.idea/
+.DS_Store
+*.zip
