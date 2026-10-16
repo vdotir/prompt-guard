@@ -14,7 +14,7 @@ Relations:
     - src/prompt_guard/vault.py reads Config.vault.
     - src/prompt_guard/clipboard.py reads Config.clipboard.
     - src/prompt_guard/ner.py reads Config.ner.
-    - Later: the llm module reads Config.llm.
+    - src/prompt_guard/llm.py reads Config.llm.
     - Tested in tests/test_config.py.
 
 Config file location (first match wins):
@@ -96,6 +96,9 @@ class LlmConfig:
     model: str = "qwen3-8b"
     api_key: str = "lm-studio"
     timeout: float = 120.0
+    max_chunk_chars: int = 6000  # text per request; keep well inside the model's context
+    max_tokens: int = 2048  # answer length limit per request
+    structured_output: str = "json_schema"  # "json_schema", "json_object" or "none"
 
 
 CLIPBOARD_BACKENDS = ("auto", "wayland", "x11", "wsl", "macos")
@@ -218,6 +221,16 @@ def parse_config(data: dict[str, Any], source: str | None = None) -> Config:
         raise ConfigError("clipboard.timeout: must be more than 0")
     if not 0 < cfg.ner.threshold < 1:
         raise ConfigError("ner.threshold: must be between 0 and 1")
+    if not cfg.llm.base_url.startswith(("http://", "https://")):
+        raise ConfigError("llm.base_url: must start with http:// or https://")
+    if cfg.llm.timeout <= 0:
+        raise ConfigError("llm.timeout: must be more than 0")
+    if not 500 <= cfg.llm.max_chunk_chars <= 100_000:
+        raise ConfigError("llm.max_chunk_chars: must be between 500 and 100000")
+    if not 64 <= cfg.llm.max_tokens <= 32_768:
+        raise ConfigError("llm.max_tokens: must be between 64 and 32768")
+    if cfg.llm.structured_output not in ("json_schema", "json_object", "none"):
+        raise ConfigError('llm.structured_output: must be "json_schema", "json_object" or "none"')
     if cfg.ner.device not in ("cpu", "cuda"):
         raise ConfigError('ner.device: must be "cpu" or "cuda"')
     if not 20 <= cfg.ner.max_chunk_words <= 350:

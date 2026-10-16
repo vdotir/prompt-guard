@@ -22,7 +22,7 @@ import os
 
 import pytest
 
-from prompt_guard import ner
+from prompt_guard import llm, ner
 from prompt_guard.cli import is_redirected, main, mask
 from prompt_guard.clipboard import Backend, Clipboard
 from tests import fakes
@@ -178,6 +178,42 @@ def test_no_ner_flag_overrides_config(tmp_path, monkeypatch):
     code, out, _ = run(["redact", "-c", str(p), "--no-ner"], "a@example.org")
     assert code == 0
     assert out == "[[EMAIL_1]]"
+
+
+def test_llm_down_is_error_and_writes_nothing(config, monkeypatch):
+    def down(url, payload, headers, timeout):
+        raise llm.LlmUnavailable("cannot reach the server")
+
+    monkeypatch.setattr(llm, "http_json", down)
+    code, out, err = run(["redact", "-c", config, "--llm"], "Bob Marsh, a@example.org")
+    assert code == 1
+    assert out == ""
+    assert "cannot reach" in err
+
+
+def test_llm_finds_extra_value(config, monkeypatch):
+    def server(url, payload, headers, timeout):
+        content = '{"items": [{"value": "Bob Marsh", "type": "PERSON"}]}'
+        return {"choices": [{"message": {"content": content}}]}
+
+    monkeypatch.setattr(llm, "http_json", server)
+    code, out, _ = run(["redact", "-c", config, "--llm"], "Bob Marsh, a@example.org")
+    assert code == 0
+    assert out == "[[PERSON_1]], [[EMAIL_1]]"
+
+
+@pytest.mark.parametrize(("model", "code"), [("qwen3-8b", 0), ("missing-model", 1)])
+def test_llm_check(tmp_path, monkeypatch, model, code):
+    p = tmp_path / "c.toml"
+    p.write_text(f'[llm]\nmodel = "{model}"\n')
+
+    def server(url, payload, headers, timeout):
+        return {"data": [{"id": "qwen3-8b"}, {"id": "gemma-3-4b"}]}
+
+    monkeypatch.setattr(llm, "http_json", server)
+    rc, out, err = run(["llm-check", "-c", str(p)])
+    assert rc == code
+    assert "qwen3-8b" in out and "gemma-3-4b" in out
 
 
 def test_bad_config_is_clean_error(tmp_path):

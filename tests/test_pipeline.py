@@ -1,9 +1,9 @@
 """Tests for the detection pipeline.
 
 Purpose:
-    Check that enabled layers run, disabled ones do not, that a layer not
-    yet available (llm) gives a note, and that a missing NER install fails
-    loudly instead of being skipped.
+    Check that enabled layers run, disabled ones do not, and that a layer
+    that cannot run (NER not installed, LLM server down) fails loudly
+    instead of being skipped.
 
 Path in repo:
     tests/test_pipeline.py
@@ -17,7 +17,7 @@ How to run:
 
 import pytest
 
-from prompt_guard import ner
+from prompt_guard import llm, ner
 from prompt_guard.config import Config, LayersConfig
 from prompt_guard.pipeline import detect_all
 
@@ -36,10 +36,13 @@ def test_rules_disabled_gives_warning():
     assert any("disabled" in n for n in d.notes)
 
 
-def test_future_llm_layer_gives_note():
-    d = detect_all(TEXT, Config(layers=LayersConfig(llm=True)))
-    assert [s.kind for s in d.spans] == ["EMAIL"]
-    assert len(d.notes) == 1
+def test_llm_unavailable_raises(monkeypatch):
+    def down(url, payload, headers, timeout):
+        raise llm.LlmUnavailable("down")
+
+    monkeypatch.setattr(llm, "http_json", down)
+    with pytest.raises(llm.LlmUnavailable):
+        detect_all(TEXT, Config(layers=LayersConfig(llm=True)))
 
 
 def test_ner_unavailable_raises(monkeypatch):

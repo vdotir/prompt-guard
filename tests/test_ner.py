@@ -145,3 +145,33 @@ def test_real_model_finds_a_name():
     text = "Please forward the invoice to Margaret Thompson in accounting."
     kinds = {s.kind for s in NerDetector().detect(text)}
     assert "PERSON" in kinds
+
+
+def test_known_loader_warnings_are_silenced(monkeypatch):
+    import sys
+    import types
+    import warnings
+
+    from prompt_guard import ner as ner_module
+
+    class FakeGLiNER:
+        @staticmethod
+        def from_pretrained(model, **kwargs):
+            warnings.warn(
+                "`torch.jit.script` is not supported in Python 3.14+ and may break.",
+                FutureWarning,
+                stacklevel=2,
+            )
+            warnings.warn(
+                "The `resume_download` argument is deprecated and ignored.",
+                UserWarning,
+                stacklevel=2,
+            )
+            warnings.warn("something else", UserWarning, stacklevel=2)
+            return "model"
+
+    monkeypatch.setitem(sys.modules, "gliner", types.SimpleNamespace(GLiNER=FakeGLiNER))
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        assert ner_module.load_model(NerConfig()) == "model"
+    assert [str(w.message) for w in caught] == ["something else"]

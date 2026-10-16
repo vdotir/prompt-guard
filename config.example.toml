@@ -48,14 +48,23 @@ max_chunk_words = 200
 offline_after_download = true   # after the first download, never contact Hugging Face
 
 [llm]
-# Any OpenAI-compatible server.
-# LM Studio on this machine:        http://localhost:1234/v1
-# LM Studio on another LAN host:    http://<host-ip>:1234/v1  ("Serve on Local Network" on)
-# Ollama:                           http://localhost:11434/v1
+# Layer 3: a local LLM lists sensitive values that layers 1 and 2 missed.
+# It only lists values; it never rewrites your text. Off by default: use --llm,
+# or set [layers] llm = true. Check the connection with: pgd llm-check
+#
+# Any OpenAI-compatible server:
+#   LM Studio on this machine:        http://localhost:1234/v1
+#   LM Studio on another LAN host:    http://<host-ip>:1234/v1  ("Serve on Local Network" on)
+#   Ollama:                           http://localhost:11434/v1
 base_url = "http://localhost:1234/v1"
-model = "qwen3-8b"
-api_key = "lm-studio"   # LM Studio and Ollama ignore it, but the client needs a value
-timeout = 120.0         # seconds
+model = "qwen3-8b"      # the model id exactly as "pgd llm-check" lists it
+api_key = "lm-studio"   # LM Studio and Ollama ignore it, but a value is sent
+timeout = 120.0         # seconds per request
+max_chunk_chars = 6000  # long text is sent in pieces of this size
+max_tokens = 2048       # answer length limit per request
+# How to force JSON answers: "json_schema" (LM Studio, recent Ollama),
+# "json_object" (older servers), or "none" (plain prompt, least reliable).
+structured_output = "json_schema"
 
 [clipboard]
 # auto picks: WSL -> Windows clipboard, Wayland -> wl-clipboard, X11 -> xclip/xsel, macOS -> pbcopy.

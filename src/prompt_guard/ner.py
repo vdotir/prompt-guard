@@ -33,6 +33,7 @@ from __future__ import annotations
 import os
 import re
 import sys
+import warnings
 from collections.abc import Iterator
 from typing import Any, Protocol
 
@@ -99,9 +100,26 @@ def chunks(text: str, max_words: int) -> Iterator[tuple[int, str]]:
         i = j
 
 
+# Known, harmless warnings from third-party libraries while loading the model.
+# Only these exact messages are silenced; every other warning is still shown.
+QUIET_WARNINGS = (
+    # torch on Python 3.14: GLiNER still uses torch.jit.script while loading.
+    (FutureWarning, r".*torch\.jit\.script.*not supported in Python 3\.14.*"),
+    # huggingface_hub: GLiNER still passes the old resume_download argument.
+    (UserWarning, r".*resume_download.*deprecated.*"),
+)
+
+
 def load_model(cfg: NerConfig) -> EntityModel:
     """Load the GLiNER model; local cache first, download only if needed."""
     os.environ.setdefault("HF_HUB_DISABLE_TELEMETRY", "1")
+    with warnings.catch_warnings():
+        for category, message in QUIET_WARNINGS:
+            warnings.filterwarnings("ignore", message=message, category=category)
+        return _load_model(cfg)
+
+
+def _load_model(cfg: NerConfig) -> EntityModel:
     try:
         from gliner import GLiNER
     except ImportError as exc:

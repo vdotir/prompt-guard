@@ -5,6 +5,7 @@ Purpose:
     restore   put the real values back into the AI's reply
     clear     delete one session (or all) from the vault
     sessions  list the sessions in the vault
+    llm-check test the connection to the LLM server and list its models
 
     Input and output default to the clipboard. If stdin is a pipe or a file,
     it is read instead; if stdout is a pipe or a file, the result goes there.
@@ -17,13 +18,15 @@ Path in repo:
 Relations:
     - Entry points "prompt-guard" and "pgd" in pyproject.toml; also
       src/prompt_guard/__main__.py for "python -m prompt_guard".
-    - Uses config.py, pipeline.py (rules.py, ner.py), vault.py, restore.py,
-      clipboard.py.
+    - Uses config.py, pipeline.py (rules.py, ner.py, llm.py), vault.py,
+      restore.py, clipboard.py.
     - Tested in tests/test_cli.py.
 
 How to run:
     prompt-guard redact --show
     prompt-guard redact --ner --show
+    prompt-guard redact --ner --llm --show
+    prompt-guard llm-check
     prompt-guard restore
     prompt-guard redact -i -o < input.txt > redacted.txt
     prompt-guard --help
@@ -44,6 +47,7 @@ from typing import TextIO
 from prompt_guard import __version__
 from prompt_guard.clipboard import Clipboard, ClipboardError
 from prompt_guard.config import Config, ConfigError, load_config
+from prompt_guard.llm import LlmUnavailable, list_models
 from prompt_guard.ner import NerUnavailable
 from prompt_guard.pipeline import detect_all
 from prompt_guard.restore import restore
@@ -148,13 +152,19 @@ def cmd_redact(args, cfg, io, err) -> int:
     text = io.read()
     if not text.strip():
         raise CliError("input is empty: nothing to redact")
+    layers = cfg.layers
     if args.ner is not None:
-        cfg = dataclasses.replace(cfg, layers=dataclasses.replace(cfg.layers, ner=args.ner))
+        layers = dataclasses.replace(layers, ner=args.ner)
+    if args.llm is not None:
+        layers = dataclasses.replace(layers, llm=args.llm)
+    cfg = dataclasses.replace(cfg, layers=layers)
     if cfg.layers.ner:
         print(f"Running NER layer ({cfg.ner.model}, {cfg.ner.device})...", file=err)
+    if cfg.layers.llm:
+        print(f"Asking LLM ({cfg.llm.model} at {cfg.llm.base_url})...", file=err)
     try:
         detection = detect_all(text, cfg)
-    except NerUnavailable as exc:
+    except (NerUnavailable, LlmUnavailable) as exc:
         raise CliError(str(exc)) from exc
     for note in detection.notes:
         print(f"note: {note}", file=err)
@@ -221,6 +231,26 @@ def cmd_sessions(args, cfg, io, err) -> int:
     return EXIT_OK
 
 
+def cmd_llm_check(args, cfg, io, err) -> int:
+    print(f"Server: {cfg.llm.base_url}", file=err)
+    try:
+        models = list_models(cfg.llm)
+    except LlmUnavailable as exc:
+        raise CliError(str(exc)) from exc
+    for model in models:
+        mark = "*" if model == cfg.llm.model else " "
+        io.stdout.write(f"{mark} {model}\n")
+    if cfg.llm.model in models:
+        print(f"OK: model '{cfg.llm.model}' is available.", file=err)
+        return EXIT_OK
+    print(
+        f"Model '{cfg.llm.model}' is not in this list. Set [llm] model to one of the ids "
+        "above, or load the model in LM Studio.",
+        file=err,
+    )
+    return EXIT_ERROR
+
+
 def build_parser() -> argparse.ArgumentParser:
     common = argparse.ArgumentParser(add_help=False)
     common.add_argument(
@@ -261,6 +291,12 @@ def build_parser() -> argparse.ArgumentParser:
         help="turn layer 2 (names, addresses, organizations) on or off for this run; "
         "default from the config",
     )
+    p.add_argument(
+        "--llm",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+        help="turn layer 3 (local LLM review) on or off for this run; default from the config",
+    )
     p.set_defaults(func=cmd_redact)
 
     p = sub.add_parser(
@@ -274,6 +310,11 @@ def build_parser() -> argparse.ArgumentParser:
 
     p = sub.add_parser("sessions", parents=[common], help="list sessions in the vault")
     p.set_defaults(func=cmd_sessions, stdin=False, stdout=True)
+
+    p = sub.add_parser(
+        "llm-check", parents=[common], help="test the LLM server and list its models"
+    )
+    p.set_defaults(func=cmd_llm_check, stdin=False, stdout=True)
     return parser
 
 

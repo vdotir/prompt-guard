@@ -176,7 +176,7 @@ pgd redact --no-ner
 
 If layer 2 is turned on but cannot run (extra not installed, model missing), redact stops with an error and writes nothing. It never skips the layer silently.
 
-Each run loads the model again, so redact with layer 2 takes a few seconds longer than layer 1 alone.
+Each run loads the model again, so redact with layer 2 takes a few seconds longer than layer 1 alone. Two known, harmless warnings from torch and huggingface_hub during loading are hidden; all other warnings are still shown.
 
 ### Tuning
 
@@ -184,6 +184,96 @@ Each run loads the model again, so redact with layer 2 takes a few seconds longe
 - Normal words are hidden: raise `threshold` (for example 0.5), or add the word to `[rules] allowlist`.
 - Labels are free text (the model is zero-shot). Each label becomes a placeholder kind: `name` gives `[[PERSON_1]]`, `location address` and `location street` give `[[ADDRESS_1]]`, `organization` gives `[[ORG_1]]`, `username` gives `[[USERNAME_1]]`. Other labels are converted, for example `vehicle id` gives `[[VEHICLE_ID_1]]`.
 - Another model: set `model`, for example `knowledgator/gliner-pii-edge-v1.0` (faster) or `nvidia/gliner-PII` (larger). Check the model's license on its Hugging Face page.
+
+## Layer 3: LLM review (local LLM)
+
+A local model reads the text after layers 1 and 2 have hidden what they found, and lists sensitive values that are still visible (internal hostnames, project names, unusual IDs). It only lists values; the code replaces exact matches, so the model cannot change your text. It needs no extra Python package.
+
+Layer 3 is off by default. It is slower than the other layers and needs the LLM server running.
+
+### LM Studio on the same machine
+
+1. In LM Studio, download and load a model. Qwen3-8B Q4_K_M fits an 8 GB GPU.
+2. Start the server (Developer tab, "Start Server"). The default address is `http://localhost:1234/v1`.
+3. Check the connection and see the exact model id:
+
+```bash
+pgd llm-check
+```
+
+4. If the configured model is not in the list, set `model` under `[llm]` in `~/.config/prompt-guard/config.toml` to one of the listed ids.
+
+### LM Studio on another machine (for example an Ubuntu VM and LM Studio on the Windows host)
+
+1. In LM Studio on Windows, open the server settings and turn on "Serve on Local Network".
+2. Find the Windows IP address in the same network as the VM. In PowerShell on Windows:
+
+```powershell
+ipconfig
+```
+
+3. Allow port 1234 through the Windows firewall, only from the VM. Run PowerShell as administrator on Windows, and replace `<vm-ip>` with the VM's IP address (`hostname -I` in the VM shows it):
+
+```powershell
+New-NetFirewallRule -DisplayName "LM Studio from VM" -Direction Inbound -Protocol TCP -LocalPort 1234 -RemoteAddress <vm-ip> -Action Allow -Profile Private
+```
+
+4. In the VM, set the server address in `~/.config/prompt-guard/config.toml`, with `<host-ip>` from step 2:
+
+```toml
+[llm]
+base_url = "http://<host-ip>:1234/v1"
+```
+
+5. Check the connection from the VM:
+
+```bash
+pgd llm-check
+```
+
+"Serve on Local Network" lets other devices in the network use LM Studio. The firewall rule above limits that to the VM. The text you redact goes over the local network to the host, never to the internet.
+
+### Use
+
+Turn it on for one run, together with layer 2:
+
+```bash
+pgd redact --ner --llm --show
+```
+
+Turn it on by default in the config:
+
+```toml
+[layers]
+llm = true
+```
+
+Turn it off for one run when it is on by default:
+
+```bash
+pgd redact --no-llm
+```
+
+If the server cannot be reached, or the model answers with something that is not the expected JSON, redact stops with an error and writes nothing.
+
+Try layer 3 alone on some text:
+
+```bash
+echo "Deploy failed on build-07.corp-internal.lan, ask Margaret." | python -m prompt_guard.llm
+```
+
+Run the optional test against your real server:
+
+```bash
+PROMPT_GUARD_LLM_TEST=1 pytest tests/test_llm.py
+```
+
+### Tuning
+
+- Long text is sent in pieces of `max_chunk_chars` characters. If the server reports that the context is too long, lower it, or raise the context length when you load the model in LM Studio.
+- If the server rejects `response_format`, set `structured_output = "json_object"`, or `"none"` as a last resort.
+- The model can still miss values or list harmless words. Harmless words can go into `[rules] allowlist`. Always look at the result before you paste it.
+- Text that contains instructions aimed at the model ("ignore your rules") can make it list less. Layers 1 and 2 are not affected by this.
 
 ## Session vault
 
@@ -285,4 +375,7 @@ Messages and the `--show` list always go to stderr, so they never end up in the 
 - `session 'default' is empty or expired`: the session was cleared or not used for `ttl_hours`. Restore needs the same session that redacted the text.
 - `layer 'ner' needs the optional extra`: install torch and the extra (see "Layer 2"), or run with `--no-ner`.
 - `cannot load NER model`: the first download failed (no network) or the model name is wrong.
+- `cannot reach http://...`: the LLM server is not running, "Serve on Local Network" is off, the firewall blocks port 1234, or `base_url` is wrong. Check with `pgd llm-check`.
+- `server answered HTTP 400`: often the model id is wrong (check with `pgd llm-check`) or the server does not support `response_format` (see "Layer 3", "Tuning").
+- `the model did not answer with JSON`: try `structured_output = "json_schema"`, or another model.
 - `unknown placeholder(s)`: the AI wrote a placeholder that was never created. Check that part of the reply by hand.
