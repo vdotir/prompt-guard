@@ -174,3 +174,18 @@ def test_bad_session_names(cfg, name):
 
 def test_list_sessions_without_dir(tmp_path):
     assert list_sessions(VaultConfig(dir=str(tmp_path / "missing"))) == []
+
+
+def test_short_known_values_not_searched_again(cfg):
+    v = Vault.open(cfg)
+    v.redact("ru@srv:~$ ls", [Span(0, 2, "USERNAME"), Span(3, 6, "HOSTNAME")])
+    out, reps = v.redact("files in /srv/releases and the ru locale", [])
+    assert out == "files in /srv/releases and the ru locale"
+    assert reps == []
+
+
+def test_long_known_values_still_searched_again(cfg):
+    v = Vault.open(cfg)
+    v.redact("host build-07 down", [Span(5, 13, "HOSTNAME")])
+    out, _ = v.redact("again build-07", [])
+    assert out == "again [[HOSTNAME_1]]"

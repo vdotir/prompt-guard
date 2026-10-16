@@ -78,6 +78,13 @@ class RulesConfig:
         "localdomain",
         "home.arpa",
     )
+    # Your own public domains (websites, servers). The domain itself and every
+    # subdomain are hidden whole as [[DOMAIN_N]].
+    private_domains: tuple[str, ...] = ()
+    # Private IPs (10.x, 172.16-31.x, 192.168.x, fc00::/7, ...) mean nothing
+    # outside your network. false keeps them visible so the AI sees the
+    # network layout; public IPs are always hidden.
+    hide_private_ips: bool = True
 
 
 @dataclass(frozen=True)
@@ -223,12 +230,13 @@ def parse_config(data: dict[str, Any], source: str | None = None) -> Config:
     cfg = Config(**parts, source=source)
     if not 0 < cfg.rules.entropy_threshold <= 8:
         raise ConfigError("rules.entropy_threshold: must be between 0 and 8")
-    for domain in cfg.rules.internal_domains:
-        if not re.fullmatch(r"[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)*", domain):
-            raise ConfigError(
-                f"rules.internal_domains: {domain!r} is not a domain suffix like 'lan' or "
-                "'corp.example.com' (no leading dot, no wildcards)"
-            )
+    for key in ("internal_domains", "private_domains"):
+        for domain in getattr(cfg.rules, key):
+            if not re.fullmatch(r"[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)*", domain):
+                raise ConfigError(
+                    f"rules.{key}: {domain!r} is not a domain like 'lan' or "
+                    "'example.com' (no leading dot, no wildcards)"
+                )
     if cfg.rules.entropy_min_length < 8:
         raise ConfigError("rules.entropy_min_length: must be at least 8")
     if cfg.vault.ttl_hours < 0:

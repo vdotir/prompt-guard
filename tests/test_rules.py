@@ -188,3 +188,58 @@ def test_custom_internal_domain():
 
 def test_email_wins_over_hostname():
     assert found("mail ops@build.lan") == [("EMAIL", "ops@build.lan")]
+
+
+def test_shell_prompt_user_and_host():
+    text = "ru@srv:~/tunnel-guard$ sudo tunnel-guard server status"
+    assert found(text) == [("USERNAME", "ru"), ("HOSTNAME", "srv")]
+
+
+def test_root_prompt_keeps_root_visible():
+    assert found("root@web-01:/etc# ls") == [("HOSTNAME", "web-01")]
+
+
+def test_sudo_password_line():
+    assert found("[sudo] password for ru: ") == [("USERNAME", "ru")]
+
+
+@pytest.mark.parametrize("cmd", ["ssh", "scp file", "rsync -av ./x", "sftp -P 2222"])
+def test_ssh_style_user(cmd):
+    text = f"{cmd} deploy@203.0.113.9"
+    kinds = found(text)
+    assert ("USERNAME", "deploy") in kinds
+    assert ("IP", "203.0.113.9") in kinds
+
+
+def test_user_at_host_without_prompt_is_not_username():
+    # an email-like "name@host" without ":~" or ssh is left to the email rule
+    assert [k for k, _ in found("mail ru@srv now") if k == "USERNAME"] == []
+
+
+def test_private_domain_and_subdomains():
+    cfg = RulesConfig(private_domains=("example-shop.ir",))
+    text = (
+        "nginx site /etc/nginx/sites-enabled/example-shop.ir, api.example-shop.ir and "
+        "WWW.EXAMPLE-SHOP.IR; not example-shop.ir.backup or myexample-shop.ir"
+    )
+    values = [v for k, v in found(text, cfg) if k == "DOMAIN"]
+    assert values == ["example-shop.ir", "api.example-shop.ir", "WWW.EXAMPLE-SHOP.IR"]
+
+
+def test_email_on_private_domain_stays_email():
+    cfg = RulesConfig(private_domains=("example-shop.ir",))
+    assert found("write to ops@example-shop.ir", cfg) == [("EMAIL", "ops@example-shop.ir")]
+
+
+@pytest.mark.parametrize(
+    "ip", ["10.77.0.2", "192.168.1.238", "172.16.4.1", "100.64.0.9", "fd00::1", "127.0.0.1"]
+)
+def test_private_ips_can_stay_visible(ip):
+    cfg = RulesConfig(hide_private_ips=False, allowlist=())
+    assert found(f"addr {ip} here", cfg) == []
+    assert found(f"addr {ip} here", RulesConfig(allowlist=())) == [("IP", ip)]
+
+
+def test_public_ip_always_hidden():
+    cfg = RulesConfig(hide_private_ips=False)
+    assert found("endpoint 203.0.113.9:443", cfg) == [("IP", "203.0.113.9")]

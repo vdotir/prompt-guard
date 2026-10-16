@@ -112,3 +112,11 @@ def test_bad_toml_raises(tmp_path):
 def test_bad_internal_domain(domain):
     with pytest.raises(ConfigError):
         parse_config({"rules": {"internal_domains": [domain]}})
+
+
+def test_private_domains_and_private_ips_settings():
+    cfg = parse_config({"rules": {"private_domains": ["example.ir"], "hide_private_ips": False}})
+    assert cfg.rules.private_domains == ("example.ir",)
+    assert cfg.rules.hide_private_ips is False
+    with pytest.raises(ConfigError, match="private_domains"):
+        parse_config({"rules": {"private_domains": ["*.example.ir"]}})

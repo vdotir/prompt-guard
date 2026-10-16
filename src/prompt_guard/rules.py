@@ -5,7 +5,8 @@ Purpose:
     private keys, cloud and API tokens, JWTs, credentials in URLs,
     "password = ..." style assignments, emails, IPs, phone numbers,
     internal hostnames (names ending in .lan, .internal, ...), the user's
-    own words and patterns, and long random-looking strings
+    own domains, user and host names in shell prompts, sudo and ssh lines,
+    the user's own words and patterns, and long random-looking strings
     (Shannon entropy). Returns Span objects; it never changes the text.
 
 Path in repo:
@@ -14,7 +15,8 @@ Path in repo:
 Relations:
     - Uses Span / resolve_overlaps from src/prompt_guard/spans.py.
     - Reads settings from Config.rules (src/prompt_guard/config.py),
-      including internal_domains for the HOSTNAME rule.
+      including internal_domains (HOSTNAME), private_domains (DOMAIN) and
+      hide_private_ips.
     - Its spans feed the vault / redaction step (later step).
     - Tested in tests/test_rules.py.
 
@@ -81,6 +83,24 @@ BUILTIN_RULES: tuple[Rule, ...] = (
         ),
         group=1,
     ),
+    # Shell prompt "user@host:~/dir$" and "user@host:/dir#": the host part.
+    Rule(
+        "HOSTNAME",
+        _rx(r"(?<![\w@.-])[a-z_][a-z0-9_-]{0,31}@([A-Za-z0-9][A-Za-z0-9-]{0,62}):[~/]"),
+        group=1,
+    ),
+    # ... and the user part, also in "[sudo] password for user:" and "ssh user@".
+    Rule(
+        "USERNAME",
+        _rx(r"(?<![\w@.-])([a-z_][a-z0-9_-]{0,31})@[A-Za-z0-9][A-Za-z0-9-]{0,62}:[~/]"),
+        group=1,
+    ),
+    Rule("USERNAME", _rx(r"\[sudo\] password for ([a-z_][a-z0-9_-]{0,31}):"), group=1),
+    Rule(
+        "USERNAME",
+        _rx(r"\b(?:ssh|scp|sftp|rsync)\b[^\n@]*?\s([a-z_][a-z0-9_-]{0,31})@"),
+        group=1,
+    ),
     Rule("EMAIL", _rx(r"\b[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}\b")),
     # IPv4; a trailing "-beta" style suffix means a version number, not an IP.
     Rule("IP", _rx(r"(?<![\w.])(?:\d{1,3}\.){3}\d{1,3}(?![\w.]|-[A-Za-z])")),
@@ -121,12 +141,45 @@ def _looks_random(token: str, cfg: RulesConfig) -> bool:
     return shannon_entropy(token) > cfg.entropy_threshold
 
 
-def _valid_ip(value: str) -> bool:
+# Only reachable inside a local network (RFC 1918, carrier-grade NAT, loopback,
+# link-local, IPv6 unique-local). Documentation ranges are not in this list.
+LOCAL_NETWORKS = tuple(
+    ipaddress.ip_network(n)
+    for n in (
+        "10.0.0.0/8",
+        "172.16.0.0/12",
+        "192.168.0.0/16",
+        "100.64.0.0/10",
+        "127.0.0.0/8",
+        "169.254.0.0/16",
+        "::1/128",
+        "fc00::/7",
+        "fe80::/10",
+    )
+)
+
+# Account names that say nothing about the person; hiding them only confuses the AI.
+COMMON_USERNAMES = {"root", "git", "admin", "ubuntu", "user", "www-data", "nobody"}
+
+
+def _ip(value: str) -> ipaddress.IPv4Address | ipaddress.IPv6Address | None:
     try:
-        ipaddress.ip_address(value)
+        return ipaddress.ip_address(value)
     except ValueError:
-        return False
-    return True
+        return None
+
+
+def _is_private_ip(ip: ipaddress.IPv4Address | ipaddress.IPv6Address) -> bool:
+    """Addresses that only mean something inside a local network."""
+    return any(ip in net for net in LOCAL_NETWORKS if net.version == ip.version)
+
+
+def domain_rule(domains: tuple[str, ...]) -> Rule:
+    """The user's own domains: the domain itself and any subdomain, as DOMAIN."""
+    label = r"[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?"
+    names = "|".join(re.escape(d) for d in sorted(domains, key=len, reverse=True))
+    pattern = rf"(?<![\w.-])(?:{label}\.)*(?:{names})(?![\w-]|\.[A-Za-z0-9])"
+    return Rule("DOMAIN", _rx(pattern, re.IGNORECASE))
 
 
 def hostname_rule(domains: tuple[str, ...]) -> Rule:
@@ -155,15 +208,22 @@ class RuleDetector:
             if w.strip()
         ]
         hosts = [hostname_rule(self.cfg.internal_domains)] if self.cfg.internal_domains else []
+        domains = [domain_rule(self.cfg.private_domains)] if self.cfg.private_domains else []
         # User rules come first so they win ties against built-in ones.
-        self.rules: tuple[Rule, ...] = (*custom, *words, *hosts, *BUILTIN_RULES)
+        self.rules: tuple[Rule, ...] = (*custom, *words, *domains, *hosts, *BUILTIN_RULES)
 
     def _keep(self, kind: str, value: str) -> bool:
         if not value.strip() or value.casefold() in self.allow:
             return False
         if PLACEHOLDER.fullmatch(value):
             return False
-        if kind == "IP" and not _valid_ip(value):
+        if kind == "IP":
+            ip = _ip(value)
+            if ip is None:
+                return False
+            if not self.cfg.hide_private_ips and _is_private_ip(ip):
+                return False
+        if kind == "USERNAME" and value in COMMON_USERNAMES:
             return False
         return True
 

@@ -4,8 +4,9 @@ Purpose:
     Replace detected spans with placeholders like [[EMAIL_1]] and remember
     the mapping, so the AI's reply can be restored later. Each chat uses its
     own session; within a session the same value always gets the same
-    placeholder, across messages. A value already in the vault is replaced
-    in new text even if no detector flagged it this time.
+    placeholder, across messages. A value already in the vault (4 characters
+    or longer) is replaced in new text even if no detector flagged it this
+    time.
 
     Storage: one JSON file per session in the vault directory. The directory
     is created with mode 0700 and each file with mode 0600; writes are atomic
@@ -44,6 +45,9 @@ from prompt_guard.spans import Span, resolve_overlaps
 FORMAT_VERSION = 1
 DEFAULT_SESSION = "default"
 SESSION_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$")
+# Values shorter than this are not searched again in later messages; the
+# detectors still find them where their pattern matches (a prompt, a sudo line).
+MIN_KNOWN_LENGTH = 4
 PLACEHOLDER_RE = re.compile(r"\[\[([A-Z][A-Z0-9_]*)_(\d+)\]\]")
 
 
@@ -205,6 +209,8 @@ class Vault:
         # Known values first in the list: they win ties and keep their kind.
         known = []
         for value, ph in self.forward.items():
+            if len(value) < MIN_KNOWN_LENGTH:
+                continue  # "ru" or "dev" would also hit unrelated words and paths
             m = PLACEHOLDER_RE.fullmatch(ph)
             kind = m.group(1) if m else "VALUE"
             known += [Span(x.start(), x.end(), kind) for x in _bounded_finditer(value, text)]

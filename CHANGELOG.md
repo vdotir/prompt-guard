@@ -2,6 +2,15 @@
 
 All notable changes to this project. Versions follow [Semantic Versioning](https://semver.org/).
 
+## 1.1.0 (2026-10-16)
+
+Found with real terminal output: secrets were hidden, but names that identify the person and server were not.
+
+- Shell prompts (`user@host:~$`), `[sudo] password for user:` and `ssh`/`scp`/`sftp`/`rsync user@...` hide the user name as `[[USERNAME_N]]` and the prompt's host as `[[HOSTNAME_N]]`. Generic accounts (`root`, `git`, `admin`, `ubuntu`, ...) stay visible.
+- New `[rules] private_domains`: your own public domains, hidden with every subdomain as `[[DOMAIN_N]]`.
+- New `[rules] hide_private_ips` (default `true`): set `false` to keep private and local IPs visible, so the AI can see the network layout. Public IPs are always hidden.
+- Values shorter than 4 characters are no longer searched again in later messages (a hidden user `ru` no longer hides `/srv` or other words); the rules still find them where their pattern matches.
+
 ## 1.0.1 (2026-10-16)
 
 - Fix: writing the clipboard with wl-copy or xclip could hang until the timeout ("did not answer within 10s"). These tools leave a background process that kept the error pipe open. The error output now goes to a temporary file, so the write returns at once.

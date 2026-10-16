@@ -27,7 +27,7 @@ Detection runs in three layers. Each layer can be turned off.
 
 | Layer | What it finds | Runs on |
 |---|---|---|
-| 1. Rules | API keys, tokens, passwords, private keys (PEM), JWTs, URL credentials, emails, IPs, phone numbers, internal hostnames, your own words and patterns | Pure Python (regex + entropy) |
+| 1. Rules | API keys, tokens, passwords, private keys (PEM), JWTs, URL credentials, emails, IPs, phone numbers, internal hostnames, your own domains, user and host names in shell prompts, sudo and ssh lines, your own words and patterns | Pure Python (regex + entropy) |
 | 2. NER (optional) | Names, addresses, organizations, usernames | A GLiNER PII model with torch, on CPU by default |
 | 3. LLM review (optional) | Anything the first two layers missed | Any OpenAI-compatible local server (LM Studio, Ollama), standard library only |
 
@@ -96,11 +96,11 @@ Copy [config.example.toml](config.example.toml) to `~/.config/prompt-guard/confi
 
 ## Status
 
-Version 1.0.1. See [CHANGELOG.md](CHANGELOG.md).
+Version 1.1.0. See [CHANGELOG.md](CHANGELOG.md).
 
 | Part | Status |
 |---|---|
-| Layer 1: rules (regex, entropy, internal hostnames) | Done |
+| Layer 1: rules (regex, entropy, internal hostnames, private domains, shell prompts) | Done |
 | Layer 2: NER (GLiNER PII model, optional extra) | Done |
 | Layer 3: LLM review (OpenAI-compatible, optional) | Done |
 | Session vault with expiry, and restore | Done |

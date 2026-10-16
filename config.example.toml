@@ -28,6 +28,17 @@ allowlist = ["127.0.0.1", "0.0.0.0", "255.255.255.255", "localhost"]
 # github.com are not hidden, so the AI can still understand your text.
 internal_domains = ["lan", "local", "internal", "intranet", "corp", "home", "lab", "localdomain", "home.arpa"]
 
+# Your own public domains (websites, servers). The domain itself and every
+# subdomain are hidden whole: shop.example.com and api.shop.example.com ->
+# [[DOMAIN_1]], [[DOMAIN_2]]. List each domain exactly as it is written.
+private_domains = []
+
+# Private IPs (10.x, 172.16-31.x, 192.168.x, 100.64.x, fc00::/7, loopback,
+# link-local) mean nothing outside your network. Set false to keep them
+# visible, so the AI can see which addresses share a subnet. Public IPs are
+# always hidden.
+hide_private_ips = true
+
 # Your own regex patterns. name becomes the placeholder kind, e.g. [[TICKET_1]].
 # User patterns win over built-in rules when they match the same text.
 [[rules.patterns]]

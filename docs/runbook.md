@@ -99,7 +99,9 @@ A typo in a key name, a wrong type, or an invalid regex stops the program with a
 
 ## Layer 1: rules
 
-Built-in kinds: PRIVATE_KEY, AWS_KEY, GITHUB_TOKEN, SLACK_TOKEN, API_KEY, GOOGLE_API_KEY, JWT, PASSWORD (in URLs), BEARER_TOKEN, SECRET (key = value assignments and high-entropy strings), EMAIL, IP (v4 and v6), PHONE, HOSTNAME (internal names such as `build-07.corp.lan`), plus CUSTOM (your words) and your own pattern names.
+Built-in kinds: PRIVATE_KEY, AWS_KEY, GITHUB_TOKEN, SLACK_TOKEN, API_KEY, GOOGLE_API_KEY, JWT, PASSWORD (in URLs), BEARER_TOKEN, SECRET (key = value assignments and high-entropy strings), EMAIL, IP (v4 and v6), PHONE, HOSTNAME (internal names such as `build-07.corp.lan`, and the host in a shell prompt such as `ru@srv:~$`), USERNAME (in shell prompts, `[sudo] password for ...:` and `ssh user@...`), DOMAIN (your `private_domains`), plus CUSTOM (your words) and your own pattern names.
+
+Generic accounts (`root`, `git`, `admin`, `ubuntu`, `user`, `www-data`, `nobody`) are not hidden: they say nothing about you, and hiding them only confuses the AI.
 
 Try layer 1 on any text:
 
@@ -112,6 +114,9 @@ Tuning:
 - Too many harmless strings flagged as SECRET: raise `entropy_threshold` (for example 4.3) or `entropy_min_length`.
 - A value that must stay visible: add it to `allowlist`.
 - A secret format that is not caught: add a `[[rules.patterns]]` entry.
+- Your own website or server domain: add it to `private_domains` (for example `"shop.example.com"`). The domain and all its subdomains become `[[DOMAIN_N]]`. Write it exactly as it appears; `example.com` does not cover `example.com.backup`.
+- Names with no fixed shape (an SSH alias such as `tunnel-exit`, a peer name, your GitHub user): add them to `words`, or use layer 3 (`--llm`).
+- Private IPs hidden but you want the AI to see the network layout: set `hide_private_ips = false`. Public IPs stay hidden.
 - Your company's internal domain: add it to `internal_domains` (for example `"corp.example.com"`). Every name ending in it is hidden whole as `[[HOSTNAME_N]]`. Public domains such as `github.com` stay visible, so the AI can still understand the text.
 
 ## Layer 2: NER (names, addresses, organizations)
@@ -280,7 +285,7 @@ PROMPT_GUARD_LLM_TEST=1 pytest tests/test_llm.py
 
 Each chat with an online AI should use its own session. Without a session name, the session `default` is used.
 
-- Placeholders look like `[[EMAIL_1]]`. Within a session the same value always gets the same placeholder, also in later messages. A value already in the vault is hidden again even if no detector finds it the next time.
+- Placeholders look like `[[EMAIL_1]]`. Within a session the same value always gets the same placeholder, also in later messages. A value already in the vault (4 characters or longer) is hidden again even if no detector finds it the next time. Shorter values (a user `ru`, a host `srv`) are only hidden where a rule finds them, so `/srv/releases` is not changed by accident.
 - Files: `~/.local/state/prompt-guard/<session>.json` (change with `[vault] dir`). The folder has mode 0700 and each file 0600. If the permissions get looser, they are tightened again on the next run.
 - Expiry: a session not used for `ttl_hours` (default 24) is deleted the next time any session is opened. `ttl_hours = 0` keeps sessions until you clear them.
 - The vault file holds every real value of the session. Do not copy it, back it up, or put it under git.
