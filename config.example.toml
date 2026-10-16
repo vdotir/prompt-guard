@@ -1,0 +1,47 @@
+# prompt-guard example config.
+#
+# Copy to ~/.config/prompt-guard/config.toml and edit.
+# Every key is optional; the values shown here are the defaults,
+# except the examples under [rules] words / patterns.
+# Another location can be set with the PROMPT_GUARD_CONFIG environment variable.
+
+[layers]
+rules = true        # layer 1: regex + entropy (fast, no model)
+ner = false         # layer 2: GLiNER-PII for names, addresses, organizations
+llm = false         # layer 3: local LLM review (LM Studio, Ollama, ...)
+
+[rules]
+entropy = true              # flag long random-looking strings as SECRET
+entropy_threshold = 4.0     # bits per character; higher = fewer false positives
+entropy_min_length = 20     # shorter strings are never checked for entropy
+
+# Your own words to hide: project names, internal hosts, company names.
+# Matched as whole words, case-insensitive. Placeholder kind: CUSTOM.
+words = ["example-project", "intranet.example.internal"]
+
+# Values that must never be redacted (exact match, case-insensitive).
+allowlist = ["127.0.0.1", "0.0.0.0", "255.255.255.255", "localhost"]
+
+# Your own regex patterns. name becomes the placeholder kind, e.g. [[TICKET_1]].
+# User patterns win over built-in rules when they match the same text.
+[[rules.patterns]]
+name = "TICKET"
+regex = '\bEXAMPLE-\d{4}\b'
+
+[vault]
+dir = "~/.local/state/prompt-guard"   # session mapping files, created with mode 0700/0600
+
+[ner]
+model = "nvidia/gliner-PII"
+threshold = 0.5
+labels = ["person", "street_address", "organization", "username"]
+
+[llm]
+# Any OpenAI-compatible server.
+# LM Studio on this machine:        http://localhost:1234/v1
+# LM Studio on another LAN host:    http://<host-ip>:1234/v1  ("Serve on Local Network" on)
+# Ollama:                           http://localhost:11434/v1
+base_url = "http://localhost:1234/v1"
+model = "qwen3-8b"
+api_key = "lm-studio"   # LM Studio and Ollama ignore it, but the client needs a value
+timeout = 120.0         # seconds

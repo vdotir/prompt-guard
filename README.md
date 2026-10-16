@@ -28,7 +28,7 @@ Detection runs in three layers. Each layer can be turned off.
 
 The LLM only lists values. It never rewrites your text. The code replaces exact matches only, so the LLM cannot add or change content.
 
-The same value always gets the same placeholder within a session, for example `<API_KEY_1>` or `<EMAIL_2>`.
+The same value always gets the same placeholder within a session, for example `[[API_KEY_1]]` or `[[EMAIL_2]]`. Double square brackets survive Markdown chat interfaces, which often strip `<...>` as HTML.
 
 ## Supported setups
 
@@ -42,14 +42,18 @@ The same value always gets the same placeholder within a session, for example `<
 | Part | Status |
 |---|---|
 | Repository setup (README, license, tooling) | Done |
-| Config file and example template | Planned |
-| Layer 1: rules (regex + entropy) | Planned |
+| Config file and example template | Done |
+| Layer 1: rules (regex + entropy) | Done |
 | Session vault and restore | Planned |
 | CLI: `redact`, `restore`, `clear` | Planned |
 | Clipboard backends (X11, Wayland, WSL) | Planned |
 | Layer 2: NER (GLiNER-PII) | Planned |
 | Layer 3: LLM review (OpenAI-compatible) | Planned |
 | Install guide in `docs/runbook.md` | Started |
+
+## Configuration
+
+Copy [config.example.toml](config.example.toml) to `~/.config/prompt-guard/config.toml` and edit it. Every key is optional. Add your own project names, internal hosts and token formats under `[rules]`: these custom rules catch the leaks that generic detection misses.
 
 ## Development
 
