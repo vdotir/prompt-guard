@@ -33,9 +33,19 @@ dir = "~/.local/state/prompt-guard"   # session mapping files, created with mode
 ttl_hours = 24.0    # sessions not used for this long are deleted; 0 = keep until "clear"
 
 [ner]
-model = "nvidia/gliner-PII"
-threshold = 0.5
-labels = ["person", "street_address", "organization", "username"]
+# Layer 2 needs the optional extra: pip install -e ".[ner]" (see docs/runbook.md).
+# Any GLiNER model from Hugging Face works, for example:
+#   knowledgator/gliner-pii-base-v1.0   (default, Apache-2.0)
+#   knowledgator/gliner-pii-edge-v1.0   (faster, less accurate)
+#   nvidia/gliner-PII                   (larger, slower on CPU)
+model = "knowledgator/gliner-pii-base-v1.0"
+threshold = 0.3      # lower finds more (and more false positives), higher is stricter
+# Labels are free text (zero-shot). Each becomes a placeholder kind:
+# name -> PERSON, location address/street -> ADDRESS, organization -> ORG, username -> USERNAME.
+labels = ["name", "location address", "location street", "organization", "username"]
+device = "cpu"       # "cuda" only with a CUDA build of torch and a visible GPU
+max_chunk_words = 200
+offline_after_download = true   # after the first download, never contact Hugging Face
 
 [llm]
 # Any OpenAI-compatible server.

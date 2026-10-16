@@ -18,4 +18,4 @@ How to run:
         python -c "import prompt_guard; print(prompt_guard.__version__)"
 """
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"

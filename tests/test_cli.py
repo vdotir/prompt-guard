@@ -22,6 +22,7 @@ import os
 
 import pytest
 
+from prompt_guard import ner
 from prompt_guard.cli import is_redirected, main, mask
 from prompt_guard.clipboard import Backend, Clipboard
 from tests import fakes
@@ -153,6 +154,30 @@ def test_clear_and_sessions(config):
     assert "does not exist" in err
     _, _, err = run(["clear", "-c", config, "--all"])
     assert "Deleted 1 session(s)" in err
+
+
+def test_ner_unavailable_is_error_and_writes_nothing(config, monkeypatch):
+    def missing(cfg):
+        raise ner.NerUnavailable("layer 'ner' needs the optional extra")
+
+    monkeypatch.setattr(ner, "load_model", missing)
+    code, out, err = run(["redact", "-c", config, "--ner"], "Jane Doe, a@example.org")
+    assert code == 1
+    assert out == ""
+    assert "optional extra" in err
+
+
+def test_no_ner_flag_overrides_config(tmp_path, monkeypatch):
+    p = tmp_path / "c.toml"
+    p.write_text(f'[layers]\nner = true\n[vault]\ndir = "{tmp_path / "v"}"\n')
+
+    def fail(cfg):
+        raise AssertionError("model must not load with --no-ner")
+
+    monkeypatch.setattr(ner, "load_model", fail)
+    code, out, _ = run(["redact", "-c", str(p), "--no-ner"], "a@example.org")
+    assert code == 0
+    assert out == "[[EMAIL_1]]"
 
 
 def test_bad_config_is_clean_error(tmp_path):

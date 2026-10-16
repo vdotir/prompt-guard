@@ -17,11 +17,13 @@ Path in repo:
 Relations:
     - Entry points "prompt-guard" and "pgd" in pyproject.toml; also
       src/prompt_guard/__main__.py for "python -m prompt_guard".
-    - Uses config.py, pipeline.py, vault.py, restore.py, clipboard.py.
+    - Uses config.py, pipeline.py (rules.py, ner.py), vault.py, restore.py,
+      clipboard.py.
     - Tested in tests/test_cli.py.
 
 How to run:
     prompt-guard redact --show
+    prompt-guard redact --ner --show
     prompt-guard restore
     prompt-guard redact -i -o < input.txt > redacted.txt
     prompt-guard --help
@@ -30,6 +32,7 @@ How to run:
 from __future__ import annotations
 
 import argparse
+import dataclasses
 import io as _io
 import os
 import stat
@@ -41,6 +44,7 @@ from typing import TextIO
 from prompt_guard import __version__
 from prompt_guard.clipboard import Clipboard, ClipboardError
 from prompt_guard.config import Config, ConfigError, load_config
+from prompt_guard.ner import NerUnavailable
 from prompt_guard.pipeline import detect_all
 from prompt_guard.restore import restore
 from prompt_guard.vault import (
@@ -144,7 +148,14 @@ def cmd_redact(args, cfg, io, err) -> int:
     text = io.read()
     if not text.strip():
         raise CliError("input is empty: nothing to redact")
-    detection = detect_all(text, cfg)
+    if args.ner is not None:
+        cfg = dataclasses.replace(cfg, layers=dataclasses.replace(cfg.layers, ner=args.ner))
+    if cfg.layers.ner:
+        print(f"Running NER layer ({cfg.ner.model}, {cfg.ner.device})...", file=err)
+    try:
+        detection = detect_all(text, cfg)
+    except NerUnavailable as exc:
+        raise CliError(str(exc)) from exc
     for note in detection.notes:
         print(f"note: {note}", file=err)
     vault = Vault.open(cfg.vault, args.session)
@@ -242,6 +253,13 @@ def build_parser() -> argparse.ArgumentParser:
     p = sub.add_parser("redact", parents=[common, io_opts], help="hide sensitive values")
     p.add_argument(
         "--show", action="store_true", help="list what was hidden (values partly masked) on stderr"
+    )
+    p.add_argument(
+        "--ner",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+        help="turn layer 2 (names, addresses, organizations) on or off for this run; "
+        "default from the config",
     )
     p.set_defaults(func=cmd_redact)
 

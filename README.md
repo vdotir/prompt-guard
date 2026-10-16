@@ -23,7 +23,7 @@ Detection runs in three layers. Each layer can be turned off.
 | Layer | What it finds | Runs on |
 |---|---|---|
 | 1. Rules | API keys, tokens, passwords, private keys (PEM), JWTs, URL credentials, emails, IPs, phone numbers, your own patterns | Pure Python (regex + entropy) |
-| 2. NER | Names, addresses, organizations, usernames | GLiNER-PII (Python) |
+| 2. NER (optional) | Names, addresses, organizations, usernames | A GLiNER PII model with torch, on CPU by default |
 | 3. LLM review (optional) | Anything the first two layers missed | Any OpenAI-compatible local server (LM Studio, Ollama) |
 
 The LLM only lists values. It never rewrites your text. The code replaces exact matches only, so the LLM cannot add or change content.
@@ -47,9 +47,9 @@ The same value always gets the same placeholder within a session, for example `[
 | Session vault and restore | Done |
 | CLI: `redact`, `restore`, `clear`, `sessions` | Done |
 | Clipboard backends (X11, Wayland, WSL, macOS) | Done |
-| Layer 2: NER (GLiNER-PII) | Planned |
+| Layer 2: NER (GLiNER PII model, optional extra) | Done |
 | Layer 3: LLM review (OpenAI-compatible) | Planned |
-| Install and usage guide in `docs/runbook.md` | Done for layer 1 |
+| Install and usage guide in `docs/runbook.md` | Done for layers 1 and 2 |
 
 ## Quick start
 

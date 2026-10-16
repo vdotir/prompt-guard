@@ -113,6 +113,78 @@ Tuning:
 - A value that must stay visible: add it to `allowlist`.
 - A secret format that is not caught: add a `[[rules.patterns]]` entry.
 
+## Layer 2: NER (names, addresses, organizations)
+
+Layer 2 uses a GLiNER model to find personal data without a fixed shape. It needs torch and gliner, which are large, so they are an optional extra. Layer 1 works without them.
+
+### Install
+
+Inside the project venv, install the CPU build of torch first. It is much smaller than the default CUDA build, and an Ubuntu VM usually has no GPU anyway:
+
+```bash
+source ~/prompt-guard/.venv/bin/activate
+```
+
+```bash
+pip install torch --index-url https://download.pytorch.org/whl/cpu
+```
+
+Then install the extra:
+
+```bash
+pip install -e ".[ner]"
+```
+
+If pip finds no torch build for your Python version, use a Python version that PyTorch supports for the venv. A CUDA build only helps when Linux runs directly on the hardware with an NVIDIA GPU; then set `device = "cuda"` under `[ner]`.
+
+### First run
+
+The first run downloads the model from Hugging Face into `~/.cache/huggingface`. After that, with `offline_after_download = true` (default), the model is loaded from the cache and no network request is made. Your text is never sent anywhere.
+
+Download the model and check that it finds a name:
+
+```bash
+echo "Please send the invoice to Margaret Thompson at 12 Example Road." | python -m prompt_guard.ner
+```
+
+Run the optional real-model test:
+
+```bash
+PROMPT_GUARD_NER_TEST=1 pytest tests/test_ner.py
+```
+
+### Use
+
+Turn it on for one run:
+
+```bash
+pgd redact --ner --show
+```
+
+Turn it on by default in `~/.config/prompt-guard/config.toml`:
+
+```toml
+[layers]
+ner = true
+```
+
+Turn it off for one run when it is on by default:
+
+```bash
+pgd redact --no-ner
+```
+
+If layer 2 is turned on but cannot run (extra not installed, model missing), redact stops with an error and writes nothing. It never skips the layer silently.
+
+Each run loads the model again, so redact with layer 2 takes a few seconds longer than layer 1 alone.
+
+### Tuning
+
+- Names or addresses are missed: lower `threshold` (for example 0.2) or add labels.
+- Normal words are hidden: raise `threshold` (for example 0.5), or add the word to `[rules] allowlist`.
+- Labels are free text (the model is zero-shot). Each label becomes a placeholder kind: `name` gives `[[PERSON_1]]`, `location address` and `location street` give `[[ADDRESS_1]]`, `organization` gives `[[ORG_1]]`, `username` gives `[[USERNAME_1]]`. Other labels are converted, for example `vehicle id` gives `[[VEHICLE_ID_1]]`.
+- Another model: set `model`, for example `knowledgator/gliner-pii-edge-v1.0` (faster) or `nvidia/gliner-PII` (larger). Check the model's license on its Hugging Face page.
+
 ## Session vault
 
 Each chat with an online AI should use its own session. Without a session name, the session `default` is used.
@@ -211,4 +283,6 @@ Messages and the `--show` list always go to stderr, so they never end up in the 
 - `no desktop session found`: there is no DISPLAY, WAYLAND_DISPLAY or WSL, for example over SSH. Use pipes, or `-i` and `-o`.
 - `no clipboard tool found`: install the tool named in the message (see "Clipboard tools").
 - `session 'default' is empty or expired`: the session was cleared or not used for `ttl_hours`. Restore needs the same session that redacted the text.
+- `layer 'ner' needs the optional extra`: install torch and the extra (see "Layer 2"), or run with `--no-ner`.
+- `cannot load NER model`: the first download failed (no network) or the model name is wrong.
 - `unknown placeholder(s)`: the AI wrote a placeholder that was never created. Check that part of the reply by hand.

@@ -13,7 +13,8 @@ Relations:
     - src/prompt_guard/rules.py reads Config.rules.
     - src/prompt_guard/vault.py reads Config.vault.
     - src/prompt_guard/clipboard.py reads Config.clipboard.
-    - Later: ner and llm modules read their own sections.
+    - src/prompt_guard/ner.py reads Config.ner.
+    - Later: the llm module reads Config.llm.
     - Tested in tests/test_config.py.
 
 Config file location (first match wins):
@@ -75,9 +76,18 @@ class VaultConfig:
 
 @dataclass(frozen=True)
 class NerConfig:
-    model: str = "nvidia/gliner-PII"
-    threshold: float = 0.5
-    labels: tuple[str, ...] = ("person", "street_address", "organization", "username")
+    model: str = "knowledgator/gliner-pii-base-v1.0"
+    threshold: float = 0.3  # model card: 0.3 to start, lower finds more, higher is stricter
+    labels: tuple[str, ...] = (
+        "name",
+        "location address",
+        "location street",
+        "organization",
+        "username",
+    )
+    device: str = "cpu"  # "cpu" or "cuda"
+    max_chunk_words: int = 200  # text is split so each chunk fits the model's window
+    offline_after_download: bool = True  # load from the local cache, no network check
 
 
 @dataclass(frozen=True)
@@ -208,6 +218,12 @@ def parse_config(data: dict[str, Any], source: str | None = None) -> Config:
         raise ConfigError("clipboard.timeout: must be more than 0")
     if not 0 < cfg.ner.threshold < 1:
         raise ConfigError("ner.threshold: must be between 0 and 1")
+    if cfg.ner.device not in ("cpu", "cuda"):
+        raise ConfigError('ner.device: must be "cpu" or "cuda"')
+    if not 20 <= cfg.ner.max_chunk_words <= 350:
+        raise ConfigError("ner.max_chunk_words: must be between 20 and 350")
+    if not cfg.ner.labels:
+        raise ConfigError("ner.labels: needs at least one label")
     return cfg
 
 
