@@ -96,7 +96,7 @@ Copy [config.example.toml](config.example.toml) to `~/.config/prompt-guard/confi
 
 ## Status
 
-Version 1.1.0. See [CHANGELOG.md](CHANGELOG.md).
+Version 1.1.1. See [CHANGELOG.md](CHANGELOG.md).
 
 | Part | Status |
 |---|---|

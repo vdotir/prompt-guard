@@ -116,7 +116,7 @@ Tuning:
 - A secret format that is not caught: add a `[[rules.patterns]]` entry.
 - Your own website or server domain: add it to `private_domains` (for example `"shop.example.com"`). The domain and all its subdomains become `[[DOMAIN_N]]`. Write it exactly as it appears; `example.com` does not cover `example.com.backup`.
 - Names with no fixed shape (an SSH alias such as `tunnel-exit`, a peer name, your GitHub user): add them to `words`, or use layer 3 (`--llm`).
-- Private IPs hidden but you want the AI to see the network layout: set `hide_private_ips = false`. Public IPs stay hidden.
+- Private IPs hidden but you want the AI to see the network layout: set `hide_private_ips = false`. Public IPs stay hidden. The setting applies to all layers: an IP that layer 2 or 3 reports (for example as an address) is treated as an IP too.
 - Your company's internal domain: add it to `internal_domains` (for example `"corp.example.com"`). Every name ending in it is hidden whole as `[[HOSTNAME_N]]`. Public domains such as `github.com` stay visible, so the AI can still understand the text.
 
 ## Layer 2: NER (names, addresses, organizations)

@@ -2,6 +2,10 @@
 
 All notable changes to this project. Versions follow [Semantic Versioning](https://semver.org/).
 
+## 1.1.1 (2026-10-16)
+
+- Fix: `hide_private_ips = false` was only followed by layer 1. Layer 2 could still hide a private IP as `[[ADDRESS_N]]` because of a nearby word such as `client_address`, and the vault then hid that IP in every later message. Now every IP found by any layer gets the kind IP and follows the same private-IP setting.
+
 ## 1.1.0 (2026-10-16)
 
 Found with real terminal output: secrets were hidden, but names that identify the person and server were not.

@@ -16,6 +16,8 @@ Relations:
     - Layer 3: src/prompt_guard/llm.py. It sees the text with the spans of
       layers 1 and 2 already hidden, and only adds spans for exact values.
       An unreachable server is an error, never a silent skip.
+    - apply_ip_policy() applies Config.rules.hide_private_ips to the spans of
+      every layer, so an IP is handled the same way whoever found it.
     - Called by src/prompt_guard/cli.py; spans go to src/prompt_guard/vault.py.
     - Tested in tests/test_pipeline.py.
 
@@ -28,10 +30,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from prompt_guard.config import Config
+from prompt_guard.config import Config, RulesConfig
 from prompt_guard.llm import LlmReviewer
 from prompt_guard.ner import NerDetector
-from prompt_guard.rules import RuleDetector
+from prompt_guard.rules import RuleDetector, is_local_ip, parse_ip
 from prompt_guard.spans import Span, resolve_overlaps
 
 
@@ -39,6 +41,22 @@ from prompt_guard.spans import Span, resolve_overlaps
 class Detection:
     spans: list[Span]
     notes: list[str] = field(default_factory=list)  # warnings for the user
+
+
+def apply_ip_policy(text: str, spans: list[Span], cfg: RulesConfig) -> list[Span]:
+    """Treat every span whose value is an IP address the same way, whatever
+    layer found it: its kind becomes IP, and with hide_private_ips = false a
+    local IP is not hidden. Without this, NER could label "10.77.0.2" an
+    ADDRESS because of a nearby word such as "client_address".
+    """
+    result = []
+    for s in spans:
+        ip = parse_ip(s.value(text))
+        if ip is None:
+            result.append(s)
+        elif cfg.hide_private_ips or not is_local_ip(ip):
+            result.append(s if s.kind == "IP" else Span(s.start, s.end, "IP"))
+    return result
 
 
 def detect_all(
@@ -61,10 +79,11 @@ def detect_all(
     if layers.ner:
         detector = ner_detector or NerDetector(cfg.ner, cfg.rules.allowlist)
         spans += detector.detect(text)
+    spans = apply_ip_policy(text, spans, cfg.rules)
     if layers.llm:
         reviewer = llm_reviewer or LlmReviewer(cfg.llm, cfg.rules.allowlist)
         found = resolve_overlaps(spans)
-        spans = found + reviewer.review(text, found)
+        spans = found + apply_ip_policy(text, reviewer.review(text, found), cfg.rules)
     if not layers.rules:
         notes.append("layer 'rules' is disabled: secrets and keys will not be detected")
     return Detection(resolve_overlaps(spans), notes)
