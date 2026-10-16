@@ -162,14 +162,14 @@ LOCAL_NETWORKS = tuple(
 COMMON_USERNAMES = {"root", "git", "admin", "ubuntu", "user", "www-data", "nobody"}
 
 
-def _ip(value: str) -> ipaddress.IPv4Address | ipaddress.IPv6Address | None:
+def parse_ip(value: str) -> ipaddress.IPv4Address | ipaddress.IPv6Address | None:
     try:
         return ipaddress.ip_address(value)
     except ValueError:
         return None
 
 
-def _is_private_ip(ip: ipaddress.IPv4Address | ipaddress.IPv6Address) -> bool:
+def is_local_ip(ip: ipaddress.IPv4Address | ipaddress.IPv6Address) -> bool:
     """Addresses that only mean something inside a local network."""
     return any(ip in net for net in LOCAL_NETWORKS if net.version == ip.version)
 
@@ -218,10 +218,10 @@ class RuleDetector:
         if PLACEHOLDER.fullmatch(value):
             return False
         if kind == "IP":
-            ip = _ip(value)
+            ip = parse_ip(value)
             if ip is None:
                 return False
-            if not self.cfg.hide_private_ips and _is_private_ip(ip):
+            if not self.cfg.hide_private_ips and is_local_ip(ip):
                 return False
         if kind == "USERNAME" and value in COMMON_USERNAMES:
             return False

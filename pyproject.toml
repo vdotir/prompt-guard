@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "prompt-guard"
-version = "1.1.0"
+version = "1.1.1"
 description = "Local, reversible redaction of secrets and personal data before pasting into online AI chats."
 readme = "README.md"
 license = { text = "MIT" }
