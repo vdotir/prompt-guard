@@ -45,11 +45,47 @@ The same value always gets the same placeholder within a session, for example `[
 | Config file and example template | Done |
 | Layer 1: rules (regex + entropy) | Done |
 | Session vault and restore | Done |
-| CLI: `redact`, `restore`, `clear` | Planned |
-| Clipboard backends (X11, Wayland, WSL) | Planned |
+| CLI: `redact`, `restore`, `clear`, `sessions` | Done |
+| Clipboard backends (X11, Wayland, WSL, macOS) | Done |
 | Layer 2: NER (GLiNER-PII) | Planned |
 | Layer 3: LLM review (OpenAI-compatible) | Planned |
-| Install guide in `docs/runbook.md` | Started |
+| Install and usage guide in `docs/runbook.md` | Done for layer 1 |
+
+## Quick start
+
+```bash
+git clone https://github.com/vdotir/prompt-guard ~/prompt-guard
+cd ~/prompt-guard
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -e .
+```
+
+Copy the text you want to send to the AI, then redact the clipboard:
+
+```bash
+pgd redact --show
+```
+
+Paste the redacted text into the chat. Copy the AI's reply, then restore your real values into the clipboard:
+
+```bash
+pgd restore
+```
+
+When the chat is over, delete its session:
+
+```bash
+pgd clear
+```
+
+`pgd` is the short name of `prompt-guard`. Use `-s <name>` to keep one session per chat. Pipes work too:
+
+```bash
+cat app.log | pgd redact > safe.log
+```
+
+See [docs/runbook.md](docs/runbook.md) for clipboard tools, sessions and troubleshooting.
 
 ## Configuration
 

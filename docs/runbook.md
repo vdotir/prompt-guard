@@ -23,6 +23,48 @@ source .venv/bin/activate
 pip install -e ".[dev]"
 ```
 
+## Install for daily use
+
+The same venv works for development and daily use. `pip install -e .` creates two commands in the venv: `prompt-guard` and its short name `pgd`.
+
+To use `pgd` without activating the venv, link it into `~/.local/bin` (on Ubuntu this folder is already on PATH after you log in again):
+
+```bash
+mkdir -p ~/.local/bin && ln -sf ~/prompt-guard/.venv/bin/pgd ~/.local/bin/pgd && ln -sf ~/prompt-guard/.venv/bin/prompt-guard ~/.local/bin/prompt-guard
+```
+
+### Clipboard tools
+
+prompt-guard uses the system's clipboard tools. Install the one for your desktop:
+
+Ubuntu with Wayland (default on recent Ubuntu):
+
+```bash
+sudo apt install wl-clipboard
+```
+
+Ubuntu with X11:
+
+```bash
+sudo apt install xclip
+```
+
+WSL uses `powershell.exe` from Windows; nothing to install. macOS has `pbcopy` and `pbpaste` built in.
+
+Check which clipboard backend is picked:
+
+```bash
+python -m prompt_guard.clipboard
+```
+
+To force one, set `backend` under `[clipboard]` in the config (`wayland`, `x11`, `wsl`, `macos`).
+
+Ubuntu in a VMware VM: copy and paste between the VM and the host needs open-vm-tools-desktop in the VM. prompt-guard only works on the VM's own clipboard; VMware tools carry it to the host.
+
+```bash
+sudo apt install open-vm-tools-desktop
+```
+
 ## Checks before every commit
 
 ```bash
@@ -100,4 +142,73 @@ The repo is public and GitHub push protection scans every push. Tests never cont
 
 ## Usage
 
-The CLI is not available yet. See the status table in README.md.
+### Daily workflow
+
+1. Copy the text for the AI (code, log, config, message).
+2. Redact the clipboard and review what was hidden:
+
+```bash
+pgd redact --show
+```
+
+3. Paste into the online chat. Before sending, look at the text once more.
+4. Copy the AI's reply, then restore your real values into the clipboard:
+
+```bash
+pgd restore
+```
+
+5. When the chat is over, delete its session:
+
+```bash
+pgd clear
+```
+
+### One session per chat
+
+Placeholder numbers belong to a session. Use a name per chat so two chats do not mix:
+
+```bash
+pgd redact -s backup-script --show
+```
+
+```bash
+pgd restore -s backup-script
+```
+
+List and delete sessions:
+
+```bash
+pgd sessions
+```
+
+```bash
+pgd clear --all
+```
+
+### Pipes and files
+
+If stdin is a pipe or a file, it is read instead of the clipboard. If stdout is a pipe or a file, the result goes there. `-i` and `-o` force stdin/stdout.
+
+```bash
+pgd redact < app.log > app.safe.log
+```
+
+```bash
+journalctl -u myservice -n 200 | pgd redact -s logs | less
+```
+
+Messages and the `--show` list always go to stderr, so they never end up in the clipboard or the output file. `--show` masks values (for example `ops@…rg (15 chars)`), so real secrets do not stay in the terminal scrollback.
+
+### Exit codes
+
+- 0: done (also when nothing was found, or when restore warns about unknown placeholders)
+- 1: error (bad config, empty input, empty or expired session, no clipboard tool); nothing is written
+- 2: wrong command-line usage
+
+### Troubleshooting
+
+- `no desktop session found`: there is no DISPLAY, WAYLAND_DISPLAY or WSL, for example over SSH. Use pipes, or `-i` and `-o`.
+- `no clipboard tool found`: install the tool named in the message (see "Clipboard tools").
+- `session 'default' is empty or expired`: the session was cleared or not used for `ttl_hours`. Restore needs the same session that redacted the text.
+- `unknown placeholder(s)`: the AI wrote a placeholder that was never created. Check that part of the reply by hand.

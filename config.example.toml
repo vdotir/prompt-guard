@@ -46,3 +46,9 @@ base_url = "http://localhost:1234/v1"
 model = "qwen3-8b"
 api_key = "lm-studio"   # LM Studio and Ollama ignore it, but the client needs a value
 timeout = 120.0         # seconds
+
+[clipboard]
+# auto picks: WSL -> Windows clipboard, Wayland -> wl-clipboard, X11 -> xclip/xsel, macOS -> pbcopy.
+# Set one of "wayland", "x11", "wsl", "macos" to force it.
+backend = "auto"
+timeout = 10.0   # seconds

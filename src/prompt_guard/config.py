@@ -11,7 +11,9 @@ Path in repo:
 Relations:
     - config.example.toml (repo root) documents every key with its default.
     - src/prompt_guard/rules.py reads Config.rules.
-    - Later: vault, ner and llm modules read their own sections.
+    - src/prompt_guard/vault.py reads Config.vault.
+    - src/prompt_guard/clipboard.py reads Config.clipboard.
+    - Later: ner and llm modules read their own sections.
     - Tested in tests/test_config.py.
 
 Config file location (first match wins):
@@ -86,6 +88,15 @@ class LlmConfig:
     timeout: float = 120.0
 
 
+CLIPBOARD_BACKENDS = ("auto", "wayland", "x11", "wsl", "macos")
+
+
+@dataclass(frozen=True)
+class ClipboardConfig:
+    backend: str = "auto"  # one of CLIPBOARD_BACKENDS
+    timeout: float = 10.0  # seconds for one clipboard command
+
+
 @dataclass(frozen=True)
 class Config:
     layers: LayersConfig = field(default_factory=LayersConfig)
@@ -93,6 +104,7 @@ class Config:
     vault: VaultConfig = field(default_factory=VaultConfig)
     ner: NerConfig = field(default_factory=NerConfig)
     llm: LlmConfig = field(default_factory=LlmConfig)
+    clipboard: ClipboardConfig = field(default_factory=ClipboardConfig)
     source: str | None = None  # path the config was read from, if any
 
 
@@ -102,6 +114,7 @@ SECTIONS = {
     "vault": VaultConfig,
     "ner": NerConfig,
     "llm": LlmConfig,
+    "clipboard": ClipboardConfig,
 }
 
 
@@ -189,6 +202,10 @@ def parse_config(data: dict[str, Any], source: str | None = None) -> Config:
         raise ConfigError("rules.entropy_min_length: must be at least 8")
     if cfg.vault.ttl_hours < 0:
         raise ConfigError("vault.ttl_hours: must be 0 (never expire) or more")
+    if cfg.clipboard.backend not in CLIPBOARD_BACKENDS:
+        raise ConfigError(f"clipboard.backend: must be one of {', '.join(CLIPBOARD_BACKENDS)}")
+    if cfg.clipboard.timeout <= 0:
+        raise ConfigError("clipboard.timeout: must be more than 0")
     if not 0 < cfg.ner.threshold < 1:
         raise ConfigError("ner.threshold: must be between 0 and 1")
     return cfg
